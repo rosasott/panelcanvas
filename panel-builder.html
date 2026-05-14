@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Builder — PanelCanvas</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .dye-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.8125rem; padding: 2px 8px;
+      border-radius: 4px; background: var(--c-surface2);
+      border: 1px solid var(--c-border); white-space: nowrap;
+    }
+    .remove-btn {
+      background: none; border: none; color: var(--c-text3);
+      font-size: 1rem; line-height: 1; padding: 0 2px; cursor: pointer;
+    }
+    .remove-btn:hover { color: var(--c-conflict); }
+    .spectra-card { margin-top: 1.5rem; }
+    .suggest-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .suggest-item {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border: 1px solid var(--c-border); border-radius: var(--radius-md);
+      cursor: pointer; font-size: 0.8125rem; background: var(--c-bg);
+      transition: all 0.12s;
+    }
+    .suggest-item:hover { border-color: var(--c-accent); background: var(--c-accent-light); }
+    .suggest-si { font-family: var(--font-mono); font-size: 0.75rem; margin-left: auto; color: var(--c-text3); }
+    .row-conflict { background: rgba(185,28,28,0.04) !important; }
+    .panel-empty {
+      text-align:center; padding: 2.5rem 1rem;
+      color: var(--c-text3); font-size:0.875rem;
+      border: 1.5px dashed var(--c-border2);
+      border-radius: var(--radius-lg); margin-bottom: 1rem;
+    }
+    .panel-empty .empty-hint { margin-top:8px; font-size:0.8125rem; }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-logo">
+    <span class="dot"></span>
+    PanelCanvas
+  </div>
+  <ul class="nav-links">
+    <li><a href="index.html">Home</a></li>
+    <li><a href="panel-builder.html" class="active">Panel Builder</a></li>
+  </ul>
+  <div class="nav-spacer"></div>
+  <span class="nav-badge">v0.1 · Internal</span>
+</nav>
+
+<div class="app-layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Instrument -->
+    <div>
+      <p class="label" style="margin-bottom:10px;">Instrument</p>
+      <div class="instrument-cards" id="inst-cards">
+        <div class="instrument-card selected" data-inst="s6msk">
+          <span class="inst-dot"></span>
+          <div>
+            <div class="inst-name">MSK S6 Spectral</div>
+            <div class="inst-det">49 det · 5 lasers</div>
+          </div>
+        </div>
+        <div class="instrument-card" data-inst="a5se">
+          <span class="inst-dot"></span>
+          <div>
+            <div class="inst-name">Symphony A5 SE</div>
+            <div class="inst-det">48 det · 5 lasers · Humanitas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sample Type -->
+    <div class="form-group">
+      <label class="form-label">Sample type</label>
+      <select id="sample-type" class="form-select">
+        <option value="pbmc">PBMC</option>
+        <option value="tumor">Tumor digest</option>
+        <option value="whole_blood">Whole blood</option>
+        <option value="bone_marrow">Bone marrow</option>
+        <option value="lymph_node">Lymph node</option>
+        <option value="bronchoalveolar">BAL / Bronchoalveolar</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <!-- SI Threshold -->
+    <div>
+      <p class="form-label" style="margin-bottom:8px;">Conflict threshold (SI)</p>
+      <div class="slider-row">
+        <input type="range" id="threshold" min="0.5" max="0.95" step="0.05" value="0.7">
+        <span class="slider-val" id="thr-val">0.70</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--c-text3);margin-top:4px;">
+        <span>Strict</span><span>Lenient</span>
+      </div>
+    </div>
+
+    <!-- Laser legend -->
+    <div>
+      <p class="label" style="margin-bottom:8px;">Laser lines</p>
+      <div class="laser-legend" id="laser-legend"></div>
+    </div>
+
+    <!-- Upload spectra -->
+    <div>
+      <p class="form-label" style="margin-bottom:8px;">Reference spectra (CSV)</p>
+      <div class="upload-zone" id="upload-zone">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="margin:0 auto;display:block;color:var(--c-text3)"><path d="M10 3v10M6 7l4-4 4 4M4 14v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <p>Upload your spectra CSV</p>
+      </div>
+      <input type="file" id="spectra-file" accept=".csv" style="display:none;">
+      <p id="upload-status" style="font-size:0.75rem;color:var(--c-text3);margin-top:6px;"></p>
+      <button class="btn btn-ghost btn-sm" id="dl-template" style="margin-top:4px;width:100%;justify-content:center;">
+        ↓ Download template
+      </button>
+    </div>
+
+    <!-- Export -->
+    <div style="margin-top:auto;">
+      <button class="btn btn-secondary" id="export-btn" style="width:100%;justify-content:center;">
+        ↓ Export panel CSV
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Markers</div>
+        <div class="stat-value" id="s-markers">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Assigned dyes</div>
+        <div class="stat-value" id="s-dyes">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Worst SI</div>
+        <div class="stat-value" id="s-worst">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Conflicts</div>
+        <div class="stat-value" id="s-conflicts" style="color:var(--c-conflict)">—</div>
+      </div>
+    </div>
+
+    <!-- Panel Table -->
+    <div class="section-header">
+      <span class="section-title">Panel composition</span>
+      <button class="btn btn-primary btn-sm" id="add-marker-btn">+ Add marker</button>
+    </div>
+
+    <div id="panel-empty" class="panel-empty">
+      <div style="font-size:1.5rem;margin-bottom:8px;">◎</div>
+      No markers yet.
+      <div class="empty-hint">Click <strong>+ Add marker</strong> to start building your panel.</div>
+    </div>
+
+    <div class="panel-table-wrap" id="panel-table-wrap" style="display:none;">
+      <table class="panel-table" id="panel-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Marker</th>
+            <th>Density</th>
+            <th>Fluorochrome</th>
+            <th>Laser</th>
+            <th>Worst SI</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="panel-tbody"></tbody>
+        <tfoot>
+          <tr class="add-row">
+            <td colspan="7">
+              <button class="btn btn-ghost btn-sm" id="add-row-btn" style="color:var(--c-accent);">+ Add marker row</button>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Conflicts -->
+    <div id="conflict-section" style="display:none; margin-bottom:1.5rem;">
+      <div class="section-header">
+        <span class="section-title">⚠ Conflicts</span>
+        <span class="badge badge-err" id="conflict-count">0</span>
+      </div>
+      <div class="conflict-list" id="conflict-list"></div>
+    </div>
+
+    <!-- Spectra overlay -->
+    <div id="spectra-card" class="card spectra-card" style="display:none;">
+      <div class="card-title" id="spectra-title">Spectral overlay</div>
+      <svg id="spectra-svg" class="spectra-svg"></svg>
+      <p id="spectra-hotspots" style="font-size:0.75rem;color:var(--c-text3);margin-top:8px;"></p>
+    </div>
+
+    <!-- Similarity matrix -->
+    <div id="matrix-section" style="display:none; margin-top:1.5rem;">
+      <div class="section-header">
+        <span class="section-title">Similarity matrix</span>
+        <span style="font-size:0.8125rem;color:var(--c-text3);">Click a cell for spectral overlay</span>
+      </div>
+      <div class="matrix-wrap">
+        <svg id="matrix-svg"></svg>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Notification -->
+<div class="notif" id="notif"></div>
+
+<!-- Add Marker Modal -->
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.25);z-index:500;backdrop-filter:blur(2px);">
+  <div id="modal" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--c-bg);border:1px solid var(--c-border);border-radius:var(--radius-xl);padding:1.5rem;width:420px;max-width:95vw;box-shadow:var(--shadow-lg);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+      <h4>Add marker</h4>
+      <button class="btn btn-ghost btn-icon" id="modal-close">✕</button>
+    </div>
+
+    <!-- Marker autocomplete -->
+    <div class="form-group" style="margin-bottom:1rem;">
+      <label class="form-label">Marker</label>
+      <div class="autocomplete-wrap">
+        <input type="text" id="marker-input" class="form-input" placeholder="CD3, CD4, PD-1…" autocomplete="off">
+        <div class="autocomplete-dropdown" id="marker-dropdown"></div>
+      </div>
+    </div>
+
+    <!-- Dye autocomplete -->
+    <div class="form-group" style="margin-bottom:1.25rem;">
+      <label class="form-label">Fluorochrome <span style="color:var(--c-text3);font-weight:400;">(optional — assign later)</span></label>
+      <div class="autocomplete-wrap">
+        <input type="text" id="dye-input" class="form-input" placeholder="BV421, PE, APC…" autocomplete="off">
+        <div class="autocomplete-dropdown" id="dye-dropdown"></div>
+      </div>
+    </div>
+
+    <!-- Suggestions -->
+    <div id="suggestions-wrap" style="display:none;margin-bottom:1rem;">
+      <p class="label" style="margin-bottom:6px;">Suggested dyes for this marker</p>
+      <div class="suggest-list" id="suggest-list"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-add">Add to panel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/instruments.js"></script>
+<script src="js/dyes.js"></script>
+<script src="js/markers.js"></script>
+<script src="js/scoring.js"></script>
+<script>
+// ============================================================
+// PanelCanvas — Panel Builder App
+// ============================================================
+
+let state = {
+  instrumentId: 's6msk',
+  sampleType: 'pbmc',
+  threshold: 0.7,
+  panel: [],         // [{ marker, dyeName }]
+  customSpectra: {}, // dyeName → spectrum array (from user CSV upload)
+  nextId: 1,
+  modalMarker: null,
+  modalDye: null,
+};
+
+// Override getSpectrum to prefer user-uploaded spectra
+const _origGetSpectrum = getSpectrum;
+function getSpectrum(dyeName, instrumentId) {
+  if (state.customSpectra[dyeName]) return state.customSpectra[dyeName];
+  return _origGetSpectrum(dyeName, instrumentId);
+}
+
+// ── Laser Legend ──────────────────────────────────────────────────────────────
+function renderLaserLegend() {
+  const inst = INSTRUMENTS[state.instrumentId];
+  const wrap = document.getElementById('laser-legend');
+  const lasers = ['UV','V','B','YG','R'];
+  const labels = { UV:'UV 355', V:'V 405', B:'B 488', YG:'YG 561', R:'R 638' };
+  wrap.innerHTML = lasers.map(l => {
+    const color = inst.laserColors[l];
+    return `<span class="laser-pip" style="background:${color}18;color:${color}">${labels[l]}</span>`;
+  }).join('');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const assigned = state.panel.filter(p => p.dyeName);
+  document.getElementById('s-markers').textContent = state.panel.length;
+  document.getElementById('s-dyes').textContent = assigned.length;
+
+  if (assigned.length < 2) {
+    document.getElementById('s-worst').textContent = '—';
+    document.getElementById('s-conflicts').textContent = '—';
+    return;
+  }
+  const { conflicts, worstSI } = computePanelMatrix(state.panel, state.instrumentId, state.threshold);
+  const worstVal = Math.max(...Object.values(worstSI));
+  const cls = classifySI(worstVal, state.threshold);
+  document.getElementById('s-worst').textContent = worstVal.toFixed(2);
+  document.getElementById('s-worst').className = 'stat-value ' + cls.cssClass;
+  document.getElementById('s-conflicts').textContent = conflicts.length;
+}
+
+// ── Panel Table ───────────────────────────────────────────────────────────────
+function renderTable() {
+  const isEmpty = state.panel.length === 0;
+  document.getElementById('panel-empty').style.display = isEmpty ? 'block' : 'none';
+  document.getElementById('panel-table-wrap').style.display = isEmpty ? 'none' : 'block';
+
+  const tbody = document.getElementById('panel-tbody');
+  tbody.innerHTML = '';
+
+  // Compute worst SI per row
+  const siMap = {};
+  if (state.panel.filter(p=>p.dyeName).length >= 2) {
+    const { worstSI } = computePanelMatrix(state.panel, state.instrumentId, state.threshold);
+    Object.assign(siMap, worstSI);
+  }
+
+  state.panel.forEach((item, idx) => {
+    const marker = item.marker;
+    const dyeName = item.dyeName;
+    const dye = dyeName ? DYES[dyeName] : null;
+    const si = dyeName ? (siMap[dyeName] || 0) : null;
+    const cls = si !== null ? classifySI(si, state.threshold) : null;
+    const isConflict = cls && cls.level !== 'ok' && cls.level !== 'caution';
+
+    const tr = document.createElement('tr');
+    if (isConflict) tr.className = 'row-conflict';
+
+    // Swatch color
+    const swatchColor = dyeName ? getDyeColor(dyeName) : '#E5E7EB';
+    const laserCode = dye ? dye.excite : '';
+    const laserColor2 = laserCode ? INSTRUMENTS[state.instrumentId].laserColors[laserCode] : '#888';
+
+    tr.innerHTML = `
+      <td style="color:var(--c-text3);font-family:var(--font-mono);font-size:0.8125rem;">${idx+1}</td>
+      <td>
+        <strong style="font-size:0.9rem;">${marker ? marker.name : '<span style="color:var(--c-text3)">—</span>'}</strong>
+      </td>
+      <td>
+        ${marker ? `<span class="badge ${densityClass(marker.density)}">${marker.density}</span>` : '—'}
+      </td>
+      <td>
+        ${dyeName
+          ? `<span class="dye-tag"><span class="swatch-dot" style="background:${swatchColor}"></span>${dyeName}</span>`
+          : `<button class="btn btn-ghost btn-sm" style="color:var(--c-accent);padding:2px 6px;" onclick="openAssignDye(${idx})">+ Assign dye</button>`}
+      </td>
+      <td>
+        ${laserCode ? `<span class="badge" style="background:${laserColor2}18;color:${laserColor2}">${laserCode}</span>` : '—'}
+      </td>
+      <td>
+        ${si !== null
+          ? `<span class="si-score ${cls.cssClass}">${si.toFixed(2)}</span>`
+          : '<span style="color:var(--c-text3)">—</span>'}
+      </td>
+      <td>
+        <button class="btn btn-ghost btn-icon remove-btn" onclick="removeRow(${idx})" title="Remove">✕</button>
+      </td>
+    `;
+
+    // Click row to show spectra overlay
+    if (dyeName) {
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', e => {
+        if (e.target.tagName === 'BUTTON') return;
+        showSingleSpectrum(dyeName);
+      });
+    }
+
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Conflict List ─────────────────────────────────────────────────────────────
+function renderConflicts() {
+  const assigned = state.panel.filter(p => p.dyeName);
+  const sec = document.getElementById('conflict-section');
+  if (assigned.length < 2) { sec.style.display = 'none'; return; }
+
+  const { conflicts } = computePanelMatrix(state.panel, state.instrumentId, state.threshold);
+  if (conflicts.length === 0) { sec.style.display = 'none'; return; }
+
+  sec.style.display = 'block';
+  document.getElementById('conflict-count').textContent = conflicts.length;
+
+  const list = document.getElementById('conflict-list');
+  list.innerHTML = conflicts.map(c => {
+    const isHigh = c.level === 'danger';
+    const col = isHigh ? 'var(--c-conflict)' : 'var(--c-warn)';
+    return `
+      <div class="conflict-item ${isHigh ? '' : 'warn'}" style="cursor:pointer;"
+           onclick="showPairSpectra('${c.dye1}','${c.dye2}',${c.si.toFixed(3)})">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <span class="conflict-dyes">${c.dye1} <span style="font-weight:400;color:var(--c-text3)">vs</span> ${c.dye2}</span>
+        <span class="conflict-si" style="color:${col}">SI ${c.si.toFixed(2)}</span>
+        <span class="badge" style="background:transparent;border:1px solid ${col};color:${col}">${c.label}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Similarity Matrix ─────────────────────────────────────────────────────────
+function renderMatrix() {
+  const assigned = state.panel.filter(p => p.dyeName);
+  const sec = document.getElementById('matrix-section');
+  if (assigned.length < 2) { sec.style.display = 'none'; return; }
+
+  sec.style.display = 'block';
+  const { matrix, names } = computePanelMatrix(state.panel, state.instrumentId, state.threshold);
+  const N = names.length;
+  const cell = Math.max(28, Math.min(46, Math.floor(560 / N)));
+  const labelW = 100, topPad = 100;
+  const W = labelW + N * cell + 12;
+  const H = topPad + N * cell + 12;
+
+  let html = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+
+  // Column labels (rotated)
+  names.forEach((n, i) => {
+    const x = labelW + i * cell + cell / 2;
+    html += `<text x="${x}" y="${topPad - 8}" transform="rotate(-45 ${x} ${topPad-8})"
+      text-anchor="start" font-size="11" fill="#6B7280" font-family="DM Sans, sans-serif">${n}</text>`;
+  });
+
+  // Row labels
+  names.forEach((n, i) => {
+    const y = topPad + i * cell + cell / 2 + 4;
+    html += `<text x="${labelW - 8}" y="${y}" text-anchor="end"
+      font-size="11" fill="#6B7280" font-family="DM Sans, sans-serif">${n}</text>`;
+  });
+
+  // Cells
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const v = matrix[i][j];
+      const x = labelW + j * cell, y = topPad + i * cell;
+      let fill;
+      if (i === j) {
+        fill = '#F1F3F5';
+      } else if (v >= 0.95) {
+        fill = '#B91C1C';
+      } else if (v >= state.threshold) {
+        fill = '#DC2626';
+      } else if (v >= state.threshold - 0.15) {
+        fill = '#D97706';
+      } else {
+        // Map 0→white, threshold-0.15→light green
+        const t = v / (state.threshold - 0.15);
+        fill = `rgba(21,128,61,${(t * 0.25).toFixed(2)})`;
+      }
+      const canClick = i !== j;
+      html += `<rect x="${x+1}" y="${y+1}" width="${cell-2}" height="${cell-2}" rx="3"
+        fill="${fill}" ${canClick ? `style="cursor:pointer" data-i="${i}" data-j="${j}"` : ''}/>`;
+      if (i !== j && cell >= 32) {
+        const txtColor = v >= state.threshold ? '#fff' : '#374151';
+        html += `<text x="${x+cell/2}" y="${y+cell/2+4}" text-anchor="middle"
+          font-size="10" fill="${txtColor}" font-family="DM Mono, monospace" pointer-events="none">${v.toFixed(2)}</text>`;
+      }
+    }
+  }
+  html += '</svg>';
+
+  const svgEl = document.getElementById('matrix-svg');
+  svgEl.outerHTML = `<svg id="matrix-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${html.replace(/^<svg[^>]*>/,'')}</svg>`;
+
+  // Re-query and bind click events
+  document.querySelectorAll('#matrix-svg rect[data-i]').forEach(r => {
+    r.addEventListener('click', () => {
+      const i = +r.dataset.i, j = +r.dataset.j;
+      showPairSpectra(names[i], names[j], matrix[i][j]);
+    });
+  });
+}
+
+// ── Spectra Overlay ───────────────────────────────────────────────────────────
+function showSingleSpectrum(dyeName) {
+  const card = document.getElementById('spectra-card');
+  card.style.display = 'block';
+  document.getElementById('spectra-title').textContent = `${dyeName} — emission spectrum`;
+  document.getElementById('spectra-hotspots').textContent = '';
+  drawSpectra([[dyeName, '#007A72', 1.5]], 'Emission across all detectors');
+}
+
+function showPairSpectra(dye1, dye2, si) {
+  const card = document.getElementById('spectra-card');
+  card.style.display = 'block';
+  let verdict;
+  if (si >= 0.95)            verdict = 'Essentially indistinguishable — do not pair';
+  else if (si >= state.threshold) verdict = 'High conflict — avoid unless one is very bright';
+  else if (si >= state.threshold - 0.15) verdict = 'Moderate — expect some spread, titrate carefully';
+  else                       verdict = 'Well separated';
+  document.getElementById('spectra-title').textContent = `${dye1} vs ${dye2} — SI ${si.toFixed(3)}`;
+
+  const hotspots = getConflictHotspots(dye1, dye2, state.instrumentId);
+  const hsText = hotspots.length
+    ? 'Top overlap detectors: ' + hotspots.map(h => `${h.det.id} [${h.overlap.toFixed(2)}]`).join(' · ')
+    : '';
+  document.getElementById('spectra-hotspots').textContent = verdict + (hsText ? '\n' + hsText : '');
+
+  drawSpectra([[dye1, '#2E7ED4', 1.5],[dye2, '#C93A3A', 1.5]], null, hotspots);
+}
+
+function drawSpectra(dyes, subtitle, hotspots = []) {
+  const inst = INSTRUMENTS[state.instrumentId];
+  const dets = inst.detectors;
+  const svgEl = document.getElementById('spectra-svg');
+  const W = 640, H = 180, padL = 30, padR = 10, padT = 28, padB = 38;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const step = plotW / Math.max(dets.length - 1, 1);
+
+  // Laser bands
+  const grouped = {};
+  dets.forEach((d, i) => { if (!grouped[d.laser]) grouped[d.laser] = []; grouped[d.laser].push(i); });
+  let bands = '';
+  const laserOrder = ['UV','V','B','YG','R'];
+  laserOrder.forEach(laser => {
+    const idxs = grouped[laser]; if (!idxs) return;
+    const x0 = padL + idxs[0] * step - step / 2;
+    const x1 = padL + idxs[idxs.length-1] * step + step / 2;
+    const col = inst.laserColors[laser];
+    bands += `<rect x="${x0}" y="${padT}" width="${Math.max(0,x1-x0)}" height="${plotH}" fill="${col}" opacity="0.07"/>`;
+    bands += `<text x="${(x0+x1)/2}" y="${padT-6}" text-anchor="middle" font-size="10" fill="${col}" font-family="DM Sans,sans-serif">${laser}</text>`;
+  });
+
+  const axis = `<line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="#E5E7EB" stroke-width="0.5"/>`;
+
+  // Hotspot markers
+  let hmarks = '';
+  hotspots.forEach(h => {
+    const i = dets.indexOf(h.det);
+    if (i < 0) return;
+    const x = padL + i * step;
+    hmarks += `<rect x="${x-3}" y="${padT+plotH-3}" width="6" height="6" fill="#B91C1C" opacity="0.6" rx="1"/>`;
+  });
+
+  // Dye lines
+  let lines = '';
+  let legend = '';
+  dyes.forEach(([dyeName, color, width], li) => {
+    const spec = getSpectrum(dyeName, state.instrumentId);
+    if (!spec) return;
+    let d = '';
+    spec.forEach((v, i) => {
+      const x = padL + i * step;
+      const y = padT + plotH - v * plotH;
+      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    });
+    lines += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" opacity="0.9"/>`;
+    const ly = padT + 4 + li * 16;
+    legend += `<line x1="${W-padR-90}" y1="${ly+4}" x2="${W-padR-74}" y2="${ly+4}" stroke="${color}" stroke-width="${width}"/>
+      <text x="${W-padR-70}" y="${ly+8}" font-size="11" fill="#374151" font-family="DM Sans,sans-serif">${dyeName}</text>`;
+  });
+
+  svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svgEl.innerHTML = bands + axis + hmarks + lines + legend;
+}
+
+// ── Full Re-render ────────────────────────────────────────────────────────────
+function render() {
+  renderLaserLegend();
+  renderTable();
+  renderConflicts();
+  renderMatrix();
+  updateStats();
+}
+
+// ── Add / Remove rows ─────────────────────────────────────────────────────────
+function addPanelRow(markerObj, dyeName) {
+  state.panel.push({ id: state.nextId++, marker: markerObj, dyeName: dyeName || null });
+  render();
+}
+
+function removeRow(idx) {
+  state.panel.splice(idx, 1);
+  render();
+  showNotif('Row removed');
+}
+
+function openAssignDye(idx) {
+  state._assignIdx = idx;
+  openModal(state.panel[idx].marker);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openModal(prefilledMarker = null) {
+  state.modalMarker = prefilledMarker;
+  state.modalDye = null;
+  document.getElementById('modal-overlay').style.display = 'block';
+  document.getElementById('marker-input').value = prefilledMarker ? prefilledMarker.name : '';
+  document.getElementById('dye-input').value = '';
+  document.getElementById('suggestions-wrap').style.display = 'none';
+  document.getElementById('marker-dropdown').classList.remove('open');
+  document.getElementById('dye-dropdown').classList.remove('open');
+
+  setTimeout(() => {
+    const input = prefilledMarker
+      ? document.getElementById('dye-input')
+      : document.getElementById('marker-input');
+    input.focus();
+    if (prefilledMarker) renderSuggestions(prefilledMarker);
+  }, 50);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  state.modalMarker = null;
+  state.modalDye = null;
+  state._assignIdx = undefined;
+}
+
+// Marker autocomplete
+const markerInput = document.getElementById('marker-input');
+const markerDrop  = document.getElementById('marker-dropdown');
+markerInput.addEventListener('input', () => {
+  const q = markerInput.value;
+  if (!q) { markerDrop.classList.remove('open'); return; }
+  const results = searchMarkers(q, 8);
+  if (!results.length) { markerDrop.classList.remove('open'); return; }
+  markerDrop.innerHTML = results.map(m =>
+    `<div class="autocomplete-item" data-name="${m.name}">
+      ${m.name}
+      <span class="item-sub badge ${densityClass(m.density)}">${m.density}</span>
+    </div>`
+  ).join('');
+  markerDrop.classList.add('open');
+  markerDrop.querySelectorAll('.autocomplete-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const m = getMarker(el.dataset.name);
+      state.modalMarker = m;
+      markerInput.value = m.name;
+      markerDrop.classList.remove('open');
+      renderSuggestions(m);
+      document.getElementById('dye-input').focus();
+    });
+  });
+});
+
+// Dye autocomplete
+const dyeInput = document.getElementById('dye-input');
+const dyeDrop  = document.getElementById('dye-dropdown');
+dyeInput.addEventListener('input', () => {
+  const q = dyeInput.value.toLowerCase();
+  if (!q) { dyeDrop.classList.remove('open'); return; }
+  const results = Object.keys(DYES).filter(n => n.toLowerCase().includes(q)).slice(0, 10);
+  if (!results.length) { dyeDrop.classList.remove('open'); return; }
+  dyeDrop.innerHTML = results.map(n => {
+    const dye = DYES[n];
+    const col = getDyeColor(n);
+    return `<div class="autocomplete-item" data-dye="${n}">
+      <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+      ${n}
+      <span class="item-sub">${dye.excite} · ${dye.brightness}</span>
+    </div>`;
+  }).join('');
+  dyeDrop.classList.add('open');
+  dyeDrop.querySelectorAll('.autocomplete-item').forEach(el => {
+    el.addEventListener('click', () => {
+      state.modalDye = el.dataset.dye;
+      dyeInput.value = el.dataset.dye;
+      dyeDrop.classList.remove('open');
+    });
+  });
+});
+
+// Suggestions
+function renderSuggestions(marker) {
+  const suggestions = suggestDyes(marker, state.panel, state.instrumentId, 5);
+  if (!suggestions.length) return;
+  const wrap = document.getElementById('suggestions-wrap');
+  wrap.style.display = 'block';
+  const list = document.getElementById('suggest-list');
+  list.innerHTML = suggestions.map(s => {
+    const dye = DYES[s.dyeName];
+    const col = getDyeColor(s.dyeName);
+    const siClass = s.maxSI > state.threshold ? 'si-danger' : s.maxSI > state.threshold - 0.15 ? 'si-warn' : 'si-ok';
+    return `<div class="suggest-item" data-dye="${s.dyeName}">
+      <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+      <span style="font-weight:500;">${s.dyeName}</span>
+      <span class="badge badge-neutral">${dye.excite} · ${dye.brightness}</span>
+      <span class="suggest-si ${siClass}">max SI ${s.maxSI.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.suggest-item').forEach(el => {
+    el.addEventListener('click', () => {
+      state.modalDye = el.dataset.dye;
+      dyeInput.value = el.dataset.dye;
+      list.querySelectorAll('.suggest-item').forEach(s => s.style.border = '');
+      el.style.border = '1px solid var(--c-accent)';
+    });
+  });
+}
+
+// Modal confirm
+document.getElementById('modal-add').addEventListener('click', () => {
+  if (state._assignIdx !== undefined) {
+    // Assigning dye to existing row
+    if (state.modalDye) {
+      state.panel[state._assignIdx].dyeName = state.modalDye;
+    }
+    state._assignIdx = undefined;
+  } else {
+    if (!state.modalMarker && !markerInput.value) {
+      showNotif('Please enter a marker name'); return;
+    }
+    const marker = state.modalMarker || { name: markerInput.value, density: 'medium', category: 'Other', aliases: [] };
+    addPanelRow(marker, state.modalDye || dyeInput.value || null);
+  }
+  closeModal();
+  render();
+});
+
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('modal-overlay')) closeModal(); });
+
+// ── Instrument Switch ─────────────────────────────────────────────────────────
+document.querySelectorAll('.instrument-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.instrument-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    state.instrumentId = card.dataset.inst;
+    document.getElementById('spectra-card').style.display = 'none';
+    render();
+    showNotif(`Switched to ${INSTRUMENTS[state.instrumentId].name}`);
+  });
+});
+
+// ── Threshold ─────────────────────────────────────────────────────────────────
+document.getElementById('threshold').addEventListener('input', e => {
+  state.threshold = parseFloat(e.target.value);
+  document.getElementById('thr-val').textContent = state.threshold.toFixed(2);
+  render();
+});
+
+// ── Buttons ───────────────────────────────────────────────────────────────────
+document.getElementById('add-marker-btn').addEventListener('click', () => openModal());
+document.getElementById('add-row-btn').addEventListener('click', () => openModal());
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (state.panel.length === 0) { showNotif('Panel is empty'); return; }
+  const sampleType = document.getElementById('sample-type').value;
+  const csv = exportPanelCSV(state.panel, state.instrumentId, sampleType);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'panelcanvas_export.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showNotif('Panel exported');
+});
+
+// ── CSV Upload (custom spectra) ───────────────────────────────────────────────
+document.getElementById('upload-zone').addEventListener('click', () => document.getElementById('spectra-file').click());
+document.getElementById('spectra-file').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const text = await f.text();
+  try {
+    const inst = INSTRUMENTS[state.instrumentId];
+    const lines = text.trim().split(/\r?\n/);
+    const header = lines[0].split(',').map(s => s.trim());
+    const detIds = header.slice(1);
+    if (detIds.length !== inst.detectors.length) throw new Error(`Expected ${inst.detectors.length} detector columns, got ${detIds.length}`);
+    let count = 0;
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const parts = lines[i].split(',').map(s => s.trim());
+      const name = parts[0];
+      const vals = parts.slice(1).map(Number);
+      if (vals.some(isNaN)) continue;
+      const mx = Math.max(...vals);
+      state.customSpectra[name] = mx > 0 ? vals.map(v => v / mx) : vals;
+      count++;
+    }
+    document.getElementById('upload-status').textContent = `✓ Loaded ${count} spectra from ${f.name}`;
+    document.getElementById('upload-status').style.color = 'var(--c-ok)';
+    render();
+    showNotif(`Loaded ${count} reference spectra`);
+  } catch(err) {
+    document.getElementById('upload-status').textContent = 'Error: ' + err.message;
+    document.getElementById('upload-status').style.color = 'var(--c-conflict)';
+  }
+});
+
+document.getElementById('dl-template').addEventListener('click', () => {
+  const inst = INSTRUMENTS[state.instrumentId];
+  const header = 'fluorochrome,' + inst.detectors.map(d => d.id).join(',');
+  const example = 'ExampleDye,' + inst.detectors.map(() => '0').join(',');
+  const blob = new Blob([header + '\n' + example + '\n'], { type:'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${state.instrumentId}_spectra_template.csv`;
+  a.click(); URL.revokeObjectURL(url);
+});
+
+// ── Close dropdowns on outside click ─────────────────────────────────────────
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap')) {
+    document.querySelectorAll('.autocomplete-dropdown').forEach(d => d.classList.remove('open'));
+  }
+});
+
+// ── Notification ──────────────────────────────────────────────────────────────
+let _notifTimer;
+function showNotif(msg) {
+  const n = document.getElementById('notif');
+  n.textContent = msg; n.classList.add('show');
+  clearTimeout(_notifTimer);
+  _notifTimer = setTimeout(() => n.classList.remove('show'), 2000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

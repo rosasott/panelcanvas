@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PanelCanvas — Spectral Flow Cytometry Panel Design</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .hero { padding: 6rem 2rem 3rem; text-align: left; }
+    .hero h1 { font-size: 4rem; margin-bottom: 1.25rem; }
+    @media(max-width:600px){ .hero h1 { font-size: 2.5rem; } }
+
+    .dot-grid {
+      position: fixed; inset: 0; pointer-events: none; z-index: -1;
+      background-image: radial-gradient(circle, #E5E7EB 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.6;
+    }
+
+    .instrument-pills {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      max-width: 860px; margin: 0 auto 5rem; padding: 0 2rem;
+    }
+    .instrument-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--c-border2);
+      border-radius: 99px;
+      padding: 5px 12px;
+      font-size: 0.8125rem;
+      color: var(--c-text2);
+      background: var(--c-bg);
+    }
+    .instrument-pill .pip {
+      width: 7px; height: 7px; border-radius: 50%;
+    }
+
+    .laser-strip {
+      display: flex; gap: 0;
+      max-width: 860px; margin: 3rem auto 0;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--c-border);
+    }
+    .laser-band {
+      flex: 1; padding: 1rem; text-align: center;
+      font-size: 0.75rem; font-family: var(--font-mono); font-weight: 500;
+    }
+
+    .content-wrap { max-width: 860px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<div class="dot-grid"></div>
+
+<nav class="nav">
+  <div class="nav-logo">
+    <span class="dot"></span>
+    PanelCanvas
+  </div>
+  <ul class="nav-links">
+    <li><a href="index.html" class="active">Home</a></li>
+    <li><a href="panel-builder.html">Panel Builder</a></li>
+    <li><a href="panel-builder.html" class="nav-cta">Open tool →</a></li>
+  </ul>
+  <div class="nav-spacer"></div>
+  <span class="nav-badge">v0.1 · Internal</span>
+</nav>
+
+<div class="content-wrap">
+  <div class="hero">
+    <div class="hero-eyebrow">Spectral Flow Cytometry</div>
+    <h1>Design panels with <em>confidence.</em></h1>
+    <p class="hero-sub">
+      PanelCanvas helps you build, validate, and optimise spectral cytometry panels
+      using real reference spectra and quantitative conflict scoring — built for the
+      MSK Flow Cytometry Core.
+    </p>
+    <div class="hero-actions">
+      <a href="panel-builder.html" class="btn btn-primary" style="padding:10px 24px;font-size:0.9375rem;">
+        Open Panel Builder →
+      </a>
+      <span class="hero-note">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M7 6v4M7 4.5v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        No account required · Works offline after first load
+      </span>
+    </div>
+
+    <div class="laser-strip">
+      <div class="laser-band" style="background:rgba(124,111,247,0.1);color:#7C6FF7;">UV<br>355 nm</div>
+      <div class="laser-band" style="background:rgba(75,64,200,0.1);color:#4B40C8;">Violet<br>405 nm</div>
+      <div class="laser-band" style="background:rgba(46,126,212,0.1);color:#2E7ED4;">Blue<br>488 nm</div>
+      <div class="laser-band" style="background:rgba(201,138,26,0.1);color:#C98A1A;">YG<br>561 nm</div>
+      <div class="laser-band" style="background:rgba(201,58,58,0.1);color:#C93A3A;">Red<br>638 nm</div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features" style="margin:0 2rem 3rem;">
+    <div class="feature">
+      <div class="feature-icon">⬡</div>
+      <h3>Similarity Index Scoring</h3>
+      <p>Quantitative spectral conflict detection using cosine similarity across all fluorescence detectors — not just peak emission.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">◎</div>
+      <h3>Instrument-aware</h3>
+      <p>Configured for the MSK 100μm S6 Spectral (49 det) and the Humanitas A5 SE (48 det). Your exact detector layout, not a generic template.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">↗</div>
+      <h3>Antigen Density Guidance</h3>
+      <p>Flags fluorochrome–marker mismatches. Bright dyes on high-density antigens, sensitive dyes where you need them.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⟳</div>
+      <h3>Upload Real Spectra</h3>
+      <p>Replace synthetic reference curves with your own single-stain data. The scoring updates instantly across your whole panel.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">↓</div>
+      <h3>Export Ready</h3>
+      <p>Download your panel as a CSV with marker, fluorochrome, laser, density, and SI scores — ready for your lab notebook.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⊕</div>
+      <h3>Growing Library</h3>
+      <p>Seeded with 90+ common immunophenotyping markers and 45+ dyes. Expand with your own reference data over time.</p>
+    </div>
+  </div>
+
+  <!-- Instruments -->
+  <div style="padding: 0 2rem; margin-bottom: 4rem;">
+    <p class="label" style="margin-bottom:12px;">Supported instruments</p>
+    <div class="instrument-pills">
+      <span class="instrument-pill"><span class="pip" style="background:#007A72;"></span>MSK S6 Spectral — 49 fluorescence detectors</span>
+      <span class="instrument-pill"><span class="pip" style="background:#2E7ED4;"></span>Symphony A5 SE (Humanitas) — 48 fluorescence detectors</span>
+      <span class="instrument-pill" style="opacity:0.5;"><span class="pip" style="background:#888;"></span>Sony ID7000 — coming soon</span>
+      <span class="instrument-pill" style="opacity:0.5;"><span class="pip" style="background:#888;"></span>BD FACSDiscover A8 — coming soon</span>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>PanelCanvas · MSK Flow Cytometry Core · v0.1</span>
+  <span style="font-family:var(--font-mono);font-size:0.75rem;">Similarity Index ≠ empirical SSM — use as a design guide, validate with single-stain controls</span>
+</footer>
+
+</body>
+</html>
