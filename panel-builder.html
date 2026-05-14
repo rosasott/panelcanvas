@@ -286,11 +286,11 @@ let state = {
 };
 
 // Override getSpectrum to prefer user-uploaded spectra
-const _origGetSpectrum = getSpectrum;
-function getSpectrum(dyeName, instrumentId) {
+window._origGetSpectrum = window.getSpectrum;
+window.getSpectrum = function(dyeName, instrumentId) {
   if (state.customSpectra[dyeName]) return state.customSpectra[dyeName];
-  return _origGetSpectrum(dyeName, instrumentId);
-}
+  return window._origGetSpectrum(dyeName, instrumentId);
+};
 
 // ── Laser Legend ──────────────────────────────────────────────────────────────
 function renderLaserLegend() {
