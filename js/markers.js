@@ -129,7 +129,7 @@ const MARKERS = [
   { name:'P-Selectin',density:'medium',category:'Activation',aliases:['CD62P','SELP'] },
 
   // ── Viability ────────────────────────────────────────────────
-  { name:'Viability', density:'high', category:'Viability', aliases:['Live/Dead','LIVE/DEAD','Zombie','7-AAD'] },
+  { name:'Viability', density:'high', category:'Viability', requiredCategory:'Viability', aliases:['Live/Dead','LIVE/DEAD','Zombie','7-AAD'] },
 
 ];
 
