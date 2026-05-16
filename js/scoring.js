@@ -112,7 +112,14 @@ function suggestDyes(marker, panelItems, instrumentId, limit = 5) {
   if (!inst) return [];
 
   const usedDyes = new Set(panelItems.map(p => p.dyeName).filter(Boolean));
-  const candidates = Object.keys(DYES).filter(n => !usedDyes.has(n));
+  let candidates = Object.keys(DYES).filter(n => !usedDyes.has(n));
+
+  // If the marker requires a specific dye category (e.g. Viability), filter accordingly.
+  // This prevents the auto-builder from suggesting BUV805 for a Viability marker, etc.
+  if (marker && marker.requiredCategory) {
+    candidates = candidates.filter(n => DYES[n].category === marker.requiredCategory);
+  }
+
   const myMarkerName = marker ? marker.name : null;
 
   const scored = candidates.map(dyeName => {
