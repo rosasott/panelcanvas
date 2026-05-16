@@ -1,4 +1,4 @@
-// PanelCanvas — Scoring & Validation Logic (v2 — co-expression aware)
+// PanelCanvas — Scoring & Validation Logic (v3 — BD pairing logic)
 
 // ── Cosine Similarity ────────────────────────────────────────────────────────
 function cosineSimilarity(a, b) {
@@ -13,13 +13,13 @@ function cosineSimilarity(a, b) {
 
 // ── SI classification ────────────────────────────────────────────────────────
 function classifySI(si, threshold = 0.7) {
-  if (si >= 0.95)        return { level:'danger', label:'Indistinguishable', cssClass:'si-danger' };
-  if (si >= threshold)   return { level:'warn',   label:'High conflict',     cssClass:'si-warn'   };
-  if (si >= threshold - 0.15) return { level:'caution', label:'Moderate',   cssClass:'si-warn'   };
-  return                        { level:'ok',     label:'Compatible',        cssClass:'si-ok'     };
+  if (si >= 0.95)             return { level:'danger',  label:'Indistinguishable', cssClass:'si-danger' };
+  if (si >= threshold)        return { level:'warn',    label:'High conflict',     cssClass:'si-warn'   };
+  if (si >= threshold - 0.15) return { level:'caution', label:'Moderate',          cssClass:'si-warn'   };
+  return                              { level:'ok',     label:'Compatible',        cssClass:'si-ok'     };
 }
 
-// ── Compute full pairwise similarity matrix with co-expression annotation ──
+// ── Full pairwise matrix with co-expression and bio-status ──────────────────
 function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
   const validItems = panelItems.filter(p => p.dyeName);
   const names = validItems.map(p => p.dyeName);
@@ -27,7 +27,6 @@ function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
   const N = names.length;
 
   const spectra = names.map(n => getSpectrum(n, instrumentId));
-
   const matrix = Array.from({length: N}, (_, i) =>
     Array.from({length: N}, (_, j) => {
       if (i === j) return 1;
@@ -36,7 +35,6 @@ function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
     })
   );
 
-  // Collect conflicts (upper triangle)
   const conflicts = [];
   for (let i = 0; i < N; i++) {
     for (let j = i + 1; j < N; j++) {
@@ -48,14 +46,13 @@ function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
           dye1: names[i], dye2: names[j],
           marker1: markerNames[i], marker2: markerNames[j],
           si, level: cls.level, label: cls.label,
-          bioStatus: bio.status,            // 'safe' | 'problematic' | 'unknown'
-          bioRelation: bio.relation,        // 'exclusive' | 'subset' | 'co-expressed' | 'independent' | null
+          bioStatus: bio.status,
+          bioRelation: bio.relation,
           bioConfidence: bio.confidence
         });
       }
     }
   }
-  // Sort: problematic conflicts first (highest SI), then safe (lower priority)
   conflicts.sort((a, b) => {
     if (a.bioStatus !== b.bioStatus) {
       const order = { problematic: 0, unknown: 1, safe: 2 };
@@ -64,12 +61,10 @@ function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
     return b.si - a.si;
   });
 
-  // Worst SI per dye — but ONLY counts problematic conflicts
   const worstSI = {};
   const worstSIBiological = {};
   names.forEach((n, i) => {
-    let worst = 0;
-    let worstBio = 0;
+    let worst = 0, worstBio = 0;
     for (let j = 0; j < N; j++) {
       if (i === j) continue;
       const si = matrix[i][j];
@@ -84,7 +79,7 @@ function computePanelMatrix(panelItems, instrumentId, threshold = 0.7) {
   return { matrix, names, markerNames, conflicts, worstSI, worstSIBiological };
 }
 
-// ── Per-row worst SI (now bio-aware) ────────────────────────────────────────
+// ── Per-row worst SI ────────────────────────────────────────────────────────
 function getWorstSIForDye(dyeName, panelItems, instrumentId, biologicalOnly = false) {
   const validItems = panelItems.filter(p => p.dyeName);
   const idx = validItems.findIndex(p => p.dyeName === dyeName);
@@ -110,25 +105,22 @@ function getWorstSIForDye(dyeName, panelItems, instrumentId, biologicalOnly = fa
   return parseFloat(worst.toFixed(3));
 }
 
-// ── Dye suggestions — biology aware ─────────────────────────────────────────
+// ── Dye suggestions — BD pairing logic ──────────────────────────────────────
+// Score = pairing_fit_bonus - biological_SI_penalty - raw_SI_penalty
 function suggestDyes(marker, panelItems, instrumentId, limit = 5) {
   const inst = INSTRUMENTS[instrumentId];
   if (!inst) return [];
 
   const usedDyes = new Set(panelItems.map(p => p.dyeName).filter(Boolean));
   const candidates = Object.keys(DYES).filter(n => !usedDyes.has(n));
-
-  const densityMap = { high: 4, medium: 3, low: 2 };
-  const markerDensity = marker ? densityMap[marker.density] || 3 : 3;
   const myMarkerName = marker ? marker.name : null;
 
   const scored = candidates.map(dyeName => {
     const specA = getSpectrum(dyeName, instrumentId);
     if (!specA) return null;
 
-    // Worst SI against panel — but only count biologically-problematic pairs
-    let maxSI = 0;
-    let maxSIBio = 0;
+    // Worst SI against panel (biological-aware)
+    let maxSI = 0, maxSIBio = 0;
     for (const item of panelItems) {
       if (!item.dyeName) continue;
       const specB = getSpectrum(item.dyeName, instrumentId);
@@ -140,19 +132,22 @@ function suggestDyes(marker, panelItems, instrumentId, limit = 5) {
       if (bio.status !== 'safe' && si > maxSIBio) maxSIBio = si;
     }
 
-    // Brightness × antigen-density match
-    const dyeBrightness = getBrightnessRank(dyeName);
-    const brightnessScore = markerDensity <= 2
-      ? dyeBrightness
-      : (5 - dyeBrightness) * 0.5 + 2;
+    // BD pairing fit (uses spillover + resolution ranks)
+    const pairFit = classifyDyeForMarker(dyeName, marker);
+    let fitBonus = 0;
+    if (pairFit.fit === 'ideal')          fitBonus = 3;
+    else if (pairFit.fit === 'acceptable') fitBonus = 1;
+    else if (pairFit.fit === 'discouraged') fitBonus = -2;
 
-    // Penalty: biological SI matters more than raw SI
-    const siPenalty = maxSIBio * 3.5 + maxSI * 0.5;
-    const score = brightnessScore - siPenalty;
+    // Combined score: pairing fit minus SI penalties
+    const score = fitBonus - (maxSIBio * 4) - (maxSI * 0.5);
 
     return {
       dyeName, maxSI, maxSIBio, score,
-      brightness: DYES[dyeName].brightness
+      fit: pairFit.fit,
+      reason: pairFit.reason,
+      spillover: getSpilloverRank(dyeName),
+      resolution: getResolutionRank(dyeName)
     };
   }).filter(Boolean);
 
@@ -182,7 +177,7 @@ function exportPanelCSV(panelItems, instrumentId, sampleType) {
     `# Sample Type: ${sampleType || 'Not specified'}`,
     `# Date: ${new Date().toLocaleDateString()}`,
     '',
-    'Marker,Fluorochrome,Laser,Density,Worst SI (any),Worst SI (biologically relevant)'
+    'Marker,Fluorochrome,Laser,Density,Spillover Rank,Resolution Rank,Worst SI (any),Worst SI (biological)'
   ];
   panelItems.forEach(item => {
     if (!item.marker) return;
@@ -191,20 +186,19 @@ function exportPanelCSV(panelItems, instrumentId, sampleType) {
     const dye = DYES[item.dyeName];
     const laser = dye ? dye.excite : '';
     const density = item.marker.density || '';
-    lines.push(`"${item.marker.name}","${item.dyeName || ''}","${laser}","${density}","${siAny}","${siBio}"`);
+    const sp = dye ? (dye.spillover || '') : '';
+    const res = dye ? (dye.resolution || '') : '';
+    lines.push(`"${item.marker.name}","${item.dyeName || ''}","${laser}","${density}","${sp}","${res}","${siAny}","${siBio}"`);
   });
   return lines.join('\n');
 }
 
-// ── Auto-Builder: assign fluorochromes to markers ──────────────────────────
-// Greedy assignment with backtracking. For each marker (sorted by density,
-// low density = needs bright dye = assign first), iterate candidate dyes and
-// pick the one that minimizes biological SI conflict with already-assigned.
+// ── Auto-builder — BD pairing logic + per-row explanation ──────────────────
 function autoBuildPanel(markers, instrumentId, threshold = 0.7, lockedAssignments = {}) {
   const inst = INSTRUMENTS[instrumentId];
   if (!inst) return null;
 
-  // Order markers: locked first, then by density (low first → need bright dyes)
+  // Order: locked first, then by density (low → high; low needs bright dyes assigned first)
   const densityRank = { low: 1, medium: 2, high: 3 };
   const ordered = [...markers].sort((a, b) => {
     const aLocked = lockedAssignments[a.name] ? 0 : 1;
@@ -217,37 +211,48 @@ function autoBuildPanel(markers, instrumentId, threshold = 0.7, lockedAssignment
   const usedDyes = new Set();
 
   for (const marker of ordered) {
-    // Pre-locked?
     if (lockedAssignments[marker.name]) {
       const lockedDye = lockedAssignments[marker.name];
-      assignments.push({ marker, dyeName: lockedDye, locked: true });
+      assignments.push({
+        marker, dyeName: lockedDye, locked: true,
+        reason: 'User-locked assignment'
+      });
       usedDyes.add(lockedDye);
       continue;
     }
 
-    // Build candidate list, score each
-    const partialPanel = assignments.map(a => ({
-      marker: a.marker, dyeName: a.dyeName
-    }));
+    const partialPanel = assignments.map(a => ({ marker: a.marker, dyeName: a.dyeName }));
     const candidates = suggestDyes(marker, partialPanel, instrumentId, 15);
-
-    // Filter candidates already used (shouldn't happen via suggestDyes but defensive)
     const fresh = candidates.filter(c => !usedDyes.has(c.dyeName));
+
     if (fresh.length === 0) {
-      assignments.push({ marker, dyeName: null, locked: false, error: 'No compatible dye found' });
+      assignments.push({
+        marker, dyeName: null, locked: false,
+        error: 'No compatible dye found',
+        reason: 'Ran out of dyes that fit the marker’s density and spillover constraints'
+      });
       continue;
     }
 
-    // Pick best (lowest biological SI, but also penalize raw SI to avoid surprises)
     const chosen = fresh[0];
+    // Build the explanation
+    const siNote = chosen.maxSIBio > 0
+      ? ` Worst biological SI vs panel: ${chosen.maxSIBio.toFixed(2)}.`
+      : ' No biological conflict with assigned panel.';
+    const reason = `${chosen.reason}.${siNote}`;
+
     assignments.push({
       marker, dyeName: chosen.dyeName, locked: false,
-      maxSIBio: chosen.maxSIBio
+      maxSIBio: chosen.maxSIBio,
+      fit: chosen.fit,
+      reason,
+      spillover: chosen.spillover,
+      resolution: chosen.resolution
     });
     usedDyes.add(chosen.dyeName);
   }
 
-  // Restore original input order in the returned panel
+  // Restore caller's original order
   const byName = Object.fromEntries(assignments.map(a => [a.marker.name, a]));
   return markers.map(m => byName[m.name]);
 }
