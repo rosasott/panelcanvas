@@ -1475,30 +1475,85 @@ function runAutoBuild() {
 
   const viab = document.getElementById('auto-viab').value;
   const inst  = INSTRUMENTS[currentInstrumentId];
+  const isConv = currentMode === 'conventional';
 
-  // Simple heuristic auto-assignment
-  const availDyes = Object.keys(window.DYE_EMISSION || {}).filter(d => {
-    if (currentMode === 'conventional' && window.getDetectorForDye) {
+  // Build pool of valid dyes for this instrument/mode
+  let pool = Object.keys(window.DYE_EMISSION || {}).filter(d => {
+    if (isConv && window.getDetectorForDye) {
       return window.getDetectorForDye(d, inst) !== null;
     }
     return true;
   });
 
-  // Reserve viability slot first
-  let reserved = viab ? [viab] : [];
-  let pool = availDyes.filter(d => !reserved.includes(d));
-  let assignments = [];
+  // Remove viability dye from pool and reserve it
+  if (viab) pool = pool.filter(d => d !== viab);
 
+  let assignments = [];
+  const usedDetectors = new Set();
+  const usedDyes = new Set();
+
+  // Lock viability first
   if (viab) {
     assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viab });
+    usedDyes.add(viab);
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(viab, inst);
+      if (det) usedDetectors.add(det.id);
+    }
   }
 
+  // Assign each marker
   markers.forEach((m, i) => {
-    const dye = pool[i] || '';
-    if (dye) pool = pool.filter(d => d !== dye);
-    // Rough density
     const density = i < 3 ? 'high' : i < 6 ? 'medium' : 'low';
-    assignments.push({ marker: m, density, fluorochrome: dye });
+    let assigned = '';
+
+    // Find first dye in pool that doesn't clash
+    for (let j = 0; j < pool.length; j++) {
+      const candidate = pool[j];
+      if (usedDyes.has(candidate)) continue;
+
+      if (isConv && window.getDetectorForDye) {
+        // Check detector slot not already taken
+        const det = window.getDetectorForDye(candidate, inst);
+        if (!det) continue;
+        if (usedDetectors.has(det.id)) continue;
+        // Check spread conflicts against already assigned dyes
+        let hasSpreadConflict = false;
+        if (window.getSpreadConflict) {
+          for (const used of usedDyes) {
+            const conflict = window.getSpreadConflict(candidate, used);
+            if (conflict && conflict.severity === 'high') {
+              hasSpreadConflict = true;
+              break;
+            }
+          }
+        }
+        if (hasSpreadConflict) continue;
+        // Good — assign it
+        assigned = candidate;
+        usedDetectors.add(det.id);
+        break;
+      } else {
+        // Spectral: check SI against assigned dyes
+        let worstSI = 0;
+        if (window.getSpectralSI) {
+          for (const used of usedDyes) {
+            const si = window.getSpectralSI(candidate, used, inst);
+            if (si > worstSI) worstSI = si;
+          }
+        }
+        if (worstSI > 0.7) continue;
+        assigned = candidate;
+        break;
+      }
+    }
+
+    if (assigned) {
+      usedDyes.add(assigned);
+      pool = pool.filter(d => d !== assigned);
+    }
+
+    assignments.push({ marker: m, density, fluorochrome: assigned });
   });
 
   pendingAutoBuild = assignments;
@@ -1513,19 +1568,6 @@ function runAutoBuild() {
   ).join('');
 
   document.getElementById('auto-proposal').style.display = '';
-}
-
-function applyAutoBuild() {
-  panelRows = pendingAutoBuild.map((a, i) => ({
-    id: nextId++,
-    marker: a.marker,
-    density: a.density,
-    fluorochrome: a.fluorochrome
-  }));
-  closeModal('auto-modal');
-  renderPanelTable();
-  renderAll();
-  toast('Panel applied ✓');
 }
 
 /* ════════════════════════════════════════════════════════════════
