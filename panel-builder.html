@@ -1569,7 +1569,18 @@ function runAutoBuild() {
 
   document.getElementById('auto-proposal').style.display = '';
 }
-
+function applyAutoBuild() {
+  panelRows = pendingAutoBuild.map((a) => ({
+    id: nextId++,
+    marker: a.marker,
+    density: a.density,
+    fluorochrome: a.fluorochrome
+  }));
+  closeModal('auto-modal');
+  renderPanelTable();
+  renderAll();
+  toast('Panel applied ✓');
+}
 /* ════════════════════════════════════════════════════════════════
    EXPORT
    ════════════════════════════════════════════════════════════════ */
