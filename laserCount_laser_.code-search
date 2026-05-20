@@ -1,0 +1,13 @@
+# Query: laserCount[laser]
+# ContextLines: 1
+
+3 results - 1 file
+
+panel-builder.html:
+  1561      // Laser budget check
+  1562:     if ((laserCount[String(laser)] || 0) >= maxPerLaser) return false;
+  1563  
+
+  1586      const laser = getDyeExciteNm(dye);
+  1587:     if (laser) laserCount[String(laser)] = (laserCount[String(laser)] || 0) + 1;
+  1588      if (isConv && window.getDetectorForDye) {
