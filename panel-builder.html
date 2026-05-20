@@ -1474,68 +1474,127 @@ function runAutoBuild() {
   const markers = raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
   if (!markers.length) { toast('Enter at least one marker'); return; }
 
-  const viab = document.getElementById('auto-viab').value;
+  const viabLocked = document.getElementById('auto-viab').value;
   const inst  = INSTRUMENTS[currentInstrumentId];
   const isConv = currentMode === 'conventional';
 
+  // Known viability dyes — auto-builder will only pick viability from this list
+  const VIAB_DYES = new Set([
+    'LIVE/DEAD Aqua','LIVE/DEAD Blue','LIVE/DEAD Near-IR',
+    'Ghost Violet 450','Ghost Violet 510','Ghost Red 780',
+    'Zombie Aqua','Zombie Yellow','Zombie Red','Zombie NIR',
+    '7-AAD','PI','TO-PRO-3','DAPI','Hoechst 33342',
+    'BUV395','BUV496'
+  ]);
+
   // Build pool of valid dyes for this instrument/mode
+  // Exclude viability dyes from general pool — they will only be assigned to viability slot
   let pool = Object.keys(window.DYE_EMISSION || {}).filter(d => {
+    if (VIAB_DYES.has(d)) return false; // reserve viability dyes
     if (isConv && window.getDetectorForDye) {
       return window.getDetectorForDye(d, inst) !== null;
     }
     return true;
   });
 
-  // Remove viability dye from pool and reserve it
-  if (viab) pool = pool.filter(d => d !== viab);
+  // Group pool by laser so we can spread assignments
+  function getLaser(dye) {
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      return det ? det.laser : 0;
+    }
+    const em = window.DYE_EMISSION && window.DYE_EMISSION[dye];
+    if (!em) return 0;
+    const lasers = (inst.lasers || []).filter(l => em.peak > l + 10);
+    return lasers.length ? lasers[lasers.length-1] : 0;
+  }
+
+  // Sort pool so lasers alternate — avoid piling onto one laser
+  const laserOrder = inst.lasers || [];
+  pool.sort((a, b) => {
+    const la = laserOrder.indexOf(getLaser(a));
+    const lb = laserOrder.indexOf(getLaser(b));
+    return la - lb;
+  });
+
+  // Round-robin interleave across lasers
+  const byLaser = {};
+  laserOrder.forEach(l => { byLaser[l] = []; });
+  pool.forEach(d => {
+    const l = getLaser(d);
+    if (byLaser[l]) byLaser[l].push(d);
+  });
+  const interleavedPool = [];
+  let adding = true;
+  while (adding) {
+    adding = false;
+    laserOrder.forEach(l => {
+      if (byLaser[l] && byLaser[l].length) {
+        interleavedPool.push(byLaser[l].shift());
+        adding = true;
+      }
+    });
+  }
 
   let assignments = [];
   const usedDetectors = new Set();
   const usedDyes = new Set();
 
   // Lock viability first
-  if (viab) {
-    assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viab });
-    usedDyes.add(viab);
+  if (viabLocked) {
+    assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabLocked });
+    usedDyes.add(viabLocked);
     if (isConv && window.getDetectorForDye) {
-      const det = window.getDetectorForDye(viab, inst);
+      const det = window.getDetectorForDye(viabLocked, inst);
       if (det) usedDetectors.add(det.id);
+    }
+  } else {
+    // Auto-pick viability from viability pool only
+    const viabPool = [...VIAB_DYES].filter(d => {
+      if (isConv && window.getDetectorForDye) {
+        const det = window.getDetectorForDye(d, inst);
+        return det && !usedDetectors.has(det.id);
+      }
+      return window.DYE_EMISSION && window.DYE_EMISSION[d];
+    });
+    const pickedViab = viabPool[0] || '';
+    if (pickedViab) {
+      assignments.push({ marker: 'Viability', density: 'high', fluorochrome: pickedViab });
+      usedDyes.add(pickedViab);
+      if (isConv && window.getDetectorForDye) {
+        const det = window.getDetectorForDye(pickedViab, inst);
+        if (det) usedDetectors.add(det.id);
+      }
     }
   }
 
-  // Assign each marker
+  // Assign each marker from interleaved pool
   markers.forEach((m, i) => {
     const density = i < 3 ? 'high' : i < 6 ? 'medium' : 'low';
     let assigned = '';
 
-    // Find first dye in pool that doesn't clash
-    for (let j = 0; j < pool.length; j++) {
-      const candidate = pool[j];
+    for (let j = 0; j < interleavedPool.length; j++) {
+      const candidate = interleavedPool[j];
       if (usedDyes.has(candidate)) continue;
 
       if (isConv && window.getDetectorForDye) {
-        // Check detector slot not already taken
         const det = window.getDetectorForDye(candidate, inst);
         if (!det) continue;
         if (usedDetectors.has(det.id)) continue;
-        // Check spread conflicts against already assigned dyes
-        let hasSpreadConflict = false;
+        // Check high-severity spread conflicts
+        let hasConflict = false;
         if (window.getSpreadConflict) {
           for (const used of usedDyes) {
             const conflict = window.getSpreadConflict(candidate, used);
-            if (conflict && conflict.severity === 'high') {
-              hasSpreadConflict = true;
-              break;
-            }
+            if (conflict && conflict.severity === 'high') { hasConflict = true; break; }
           }
         }
-        if (hasSpreadConflict) continue;
-        // Good — assign it
+        if (hasConflict) continue;
         assigned = candidate;
         usedDetectors.add(det.id);
         break;
       } else {
-        // Spectral: check SI against assigned dyes
+        // Spectral: check SI
         let worstSI = 0;
         if (window.getSpectralSI) {
           for (const used of usedDyes) {
@@ -1551,9 +1610,7 @@ function runAutoBuild() {
 
     if (assigned) {
       usedDyes.add(assigned);
-      pool = pool.filter(d => d !== assigned);
     }
-
     assignments.push({ marker: m, density, fluorochrome: assigned });
   });
 
