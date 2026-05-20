@@ -1550,7 +1550,7 @@ function runAutoBuild() {
   const usedDyes = new Set();
   const usedDetectors = new Set();
   const laserCount = {};
-  laserOrder.forEach(l => { laserCount[l] = 0; });
+  laserOrder.forEach(l => { laserCount[String(l)] = 0; });
 
   // Check if a dye can be assigned without conflict
   function canAssign(dye, density) {
@@ -1559,7 +1559,7 @@ function runAutoBuild() {
     if (!laser) return false;
 
     // Laser budget check
-    if ((laserCount[laser] || 0) >= maxPerLaser) return false;
+    if ((laserCount[String(laser)] || 0) >= maxPerLaser) return false;
 
     if (isConv && window.getDetectorForDye) {
       const det = window.getDetectorForDye(dye, inst);
@@ -1584,7 +1584,7 @@ function runAutoBuild() {
   function assign(dye) {
     usedDyes.add(dye);
     const laser = getDyeExciteNm(dye);
-    if (laser) laserCount[laser] = (laserCount[laser] || 0) + 1;
+    if (laser) laserCount[String(laser)] = (laserCount[String(laser)] || 0) + 1;
     if (isConv && window.getDetectorForDye) {
       const det = window.getDetectorForDye(dye, inst);
       if (det) usedDetectors.add(det.id);
