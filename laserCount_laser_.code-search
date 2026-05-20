@@ -5,7 +5,7 @@
 
 panel-builder.html:
   1561      // Laser budget check
-  1562:     if ((laserCount[String(laser)] || 0) >= maxPerLaser) return false;
+  1562:     if ((laserCount[String(laser)]|| 0) >= maxPerLaser) return false;
   1563  
 
   1586      const laser = getDyeExciteNm(dye);
