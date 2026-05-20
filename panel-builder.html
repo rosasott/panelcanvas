@@ -1545,7 +1545,7 @@ function runAutoBuild() {
   });
 
   // Count how many markers per laser we can afford
-  const maxPerLaser = Math.max(1, Math.round(markerList.length / laserOrder.length));
+  const maxPerLaser = Math.max(2, Math.ceil(markerList.length / laserOrder.length));
 
   const usedDyes = new Set();
   const usedDetectors = new Set();
