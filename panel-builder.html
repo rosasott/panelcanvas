@@ -1523,11 +1523,11 @@ function runAutoBuild() {
     const res = getResolution(dyeName);  // 1=dim, 4=bright
     const sp  = getSpillover(dyeName);   // 1=clean, 4=high spillover
     if (density === 'low' || density === 'very low') {
-      // Need bright, clean dye
-      return res * 2 - sp;
+      // Low density → need BRIGHT dye (high resolution rank), spillover secondary
+      return res * 3 - sp;
     } else if (density === 'high') {
-      // Dim dye is fine, save bright slots; low spillover still preferred
-      return (5 - res) + (5 - sp);
+      // High density → prefer DIM dye (low resolution rank), save bright for rare markers
+      return (5 - res) * 2 + (5 - sp);
     } else {
       // Medium: balance
       return res + (5 - sp);
