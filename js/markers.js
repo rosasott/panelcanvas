@@ -164,3 +164,4 @@ function getMarker(name) {
 function densityClass(density) {
   return { high:'density-hi', medium:'density-med', low:'density-lo' }[density] || 'badge-neutral';
 }
+window.MARKERS = MARKERS;
