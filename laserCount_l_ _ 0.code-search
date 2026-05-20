@@ -1,0 +1,9 @@
+# Query: laserCount[l] = 0
+# ContextLines: 1
+
+1 result - 1 file
+
+panel-builder.html:
+  1552    const laserCount = {};
+  1553:   laserOrder.forEach(l => { laserCount[String(l)] = 0; });
+  1554  
