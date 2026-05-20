@@ -1640,7 +1640,7 @@ function runAutoBuild() {
   const DENSITY_ORDER = ['very low', 'low', 'medium', 'high'];
   const markerObjs = markerList.map((m, i) => {
     // Try to look up density from markers.js if available
-    const known = window.MARKERS && window.MARKERS[m.toLowerCase()];
+    const known = window.MARKERS && window.MARKERS.find(mk => mk.name.toLowerCase() === m.toLowerCase());
     const density = known ? known.density : (i < 3 ? 'high' : i < 6 ? 'medium' : 'low');
     return { marker: m, density };
   });
