@@ -1568,8 +1568,22 @@ function runAutoBuild() {
     }
   }
 
-  // Assign each marker from interleaved pool
+  // Assign each marker from interleaved pool (skip if user typed "viability")
+  const maxPerLaser = Math.ceil((markers.length + 1) / laserOrder.length) + 1;
+  const laserUsedCount = {};
+  laserOrder.forEach(l => { laserUsedCount[l] = 0; });
+
+  // Count viability laser usage
+  if (viabLocked || assignments.length) {
+    const viabDye = assignments[0] && assignments[0].fluorochrome;
+    if (viabDye) {
+      const vl = getLaser(viabDye);
+      if (laserUsedCount[vl] !== undefined) laserUsedCount[vl]++;
+    }
+  }
+
   markers.forEach((m, i) => {
+    if (m.toLowerCase() === 'viability') return; // skip if user typed viability
     const density = i < 3 ? 'high' : i < 6 ? 'medium' : 'low';
     let assigned = '';
 
@@ -1603,6 +1617,9 @@ function runAutoBuild() {
           }
         }
         if (worstSI > 0.7) continue;
+        // Don't pile onto one laser
+        const candLaser = getLaser(candidate);
+        if ((laserUsedCount[candLaser] || 0) >= maxPerLaser) continue;
         assigned = candidate;
         break;
       }
@@ -1610,6 +1627,8 @@ function runAutoBuild() {
 
     if (assigned) {
       usedDyes.add(assigned);
+      const al = getLaser(assigned);
+      if (laserUsedCount[al] !== undefined) laserUsedCount[al]++;
     }
     assignments.push({ marker: m, density, fluorochrome: assigned });
   });
