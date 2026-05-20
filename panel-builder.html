@@ -1517,7 +1517,7 @@ function runAutoBuild() {
   });
 
   // Max dyes per laser = ceil(total markers / num lasers) + 1
-  const maxPerLaser = Math.ceil(markerList.length / laserOrder.length) + 1;
+  const maxPerLaser = Math.max(1, Math.round(markerList.length / laserOrder.length));
 
   const usedDyes = new Set();
   const usedDetectors = new Set();
