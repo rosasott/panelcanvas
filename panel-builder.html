@@ -1471,171 +1471,140 @@ function setAutoTab(tab) {
 
 function runAutoBuild() {
   const raw = document.getElementById('auto-markers').value;
-  const markers = raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
-  if (!markers.length) { toast('Enter at least one marker'); return; }
+  const markerList = raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean)
+    .filter(m => m.toLowerCase() !== 'viability');
+  if (!markerList.length) { toast('Enter at least one marker'); return; }
 
   const viabLocked = document.getElementById('auto-viab').value;
-  const inst  = INSTRUMENTS[currentInstrumentId];
+  const inst = INSTRUMENTS[currentInstrumentId];
   const isConv = currentMode === 'conventional';
+  const laserOrder = inst.lasers || [];
 
-  // Known viability dyes — auto-builder will only pick viability from this list
   const VIAB_DYES = new Set([
     'LIVE/DEAD Aqua','LIVE/DEAD Blue','LIVE/DEAD Near-IR',
     'Ghost Violet 450','Ghost Violet 510','Ghost Red 780',
     'Zombie Aqua','Zombie Yellow','Zombie Red','Zombie NIR',
-    '7-AAD','PI','TO-PRO-3','DAPI','Hoechst 33342',
-    'BUV395','BUV496'
+    '7-AAD','PI','TO-PRO-3','DAPI','Hoechst 33342','BUV395','BUV496'
   ]);
 
-  // Build pool of valid dyes for this instrument/mode
-  // Exclude viability dyes from general pool — they will only be assigned to viability slot
-  let pool = Object.keys(window.DYE_EMISSION || {}).filter(d => {
-    if (VIAB_DYES.has(d)) return false; // reserve viability dyes
+  // Helper: which laser does a dye belong to?
+  function getDyeLaser(dye) {
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      return det ? det.laser : null;
+    }
+    const em = window.DYE_EMISSION && window.DYE_EMISSION[dye];
+    if (!em) return null;
+    const exc = laserOrder.filter(l => em.peak > l + 10);
+    return exc.length ? exc[exc.length-1] : null;
+  }
+
+  // Build candidate pool — no viability dyes, valid for this instrument
+  const allDyes = Object.keys(window.DYE_EMISSION || {}).filter(d => {
+    if (VIAB_DYES.has(d)) return false;
     if (isConv && window.getDetectorForDye) {
       return window.getDetectorForDye(d, inst) !== null;
     }
     return true;
   });
 
-  // Group pool by laser so we can spread assignments
-  function getLaser(dye) {
-    if (isConv && window.getDetectorForDye) {
-      const det = window.getDetectorForDye(dye, inst);
-      return det ? det.laser : 0;
-    }
-    const em = window.DYE_EMISSION && window.DYE_EMISSION[dye];
-    if (!em) return 0;
-    const lasers = (inst.lasers || []).filter(l => em.peak > l + 10);
-    return lasers.length ? lasers[lasers.length-1] : 0;
-  }
-
-  // Sort pool so lasers alternate — avoid piling onto one laser
-  const laserOrder = inst.lasers || [];
-  pool.sort((a, b) => {
-    const la = laserOrder.indexOf(getLaser(a));
-    const lb = laserOrder.indexOf(getLaser(b));
-    return la - lb;
-  });
-
-  // Round-robin interleave across lasers
+  // Bucket dyes by laser
   const byLaser = {};
   laserOrder.forEach(l => { byLaser[l] = []; });
-  pool.forEach(d => {
-    const l = getLaser(d);
-    if (byLaser[l]) byLaser[l].push(d);
+  allDyes.forEach(d => {
+    const l = getDyeLaser(d);
+    if (l && byLaser[l]) byLaser[l].push(d);
   });
-  const interleavedPool = [];
-  let adding = true;
-  while (adding) {
-    adding = false;
-    laserOrder.forEach(l => {
-      if (byLaser[l] && byLaser[l].length) {
-        interleavedPool.push(byLaser[l].shift());
-        adding = true;
+
+  // Max dyes per laser = ceil(total markers / num lasers) + 1
+  const maxPerLaser = Math.ceil(markerList.length / laserOrder.length) + 1;
+
+  const usedDyes = new Set();
+  const usedDetectors = new Set();
+  const laserCount = {};
+  laserOrder.forEach(l => { laserCount[l] = 0; });
+
+  function tryAssign(dye) {
+    if (!dye || usedDyes.has(dye)) return false;
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      if (!det || usedDetectors.has(det.id)) return false;
+      if (window.getSpreadConflict) {
+        for (const used of usedDyes) {
+          const c = window.getSpreadConflict(dye, used);
+          if (c && c.severity === 'high') return false;
+        }
       }
-    });
+      usedDyes.add(dye);
+      usedDetectors.add(det.id);
+    } else {
+      if (window.getSpectralSI) {
+        for (const used of usedDyes) {
+          if (window.getSpectralSI(dye, used, inst) > 0.7) return false;
+        }
+      }
+      const l = getDyeLaser(dye);
+      if (l && (laserCount[l] || 0) >= maxPerLaser) return false;
+      usedDyes.add(dye);
+      if (l) laserCount[l] = (laserCount[l] || 0) + 1;
+    }
+    return true;
   }
 
-  let assignments = [];
-  const usedDetectors = new Set();
-  const usedDyes = new Set();
+  const assignments = [];
 
-  // Lock viability first
-  if (viabLocked) {
-    assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabLocked });
-    usedDyes.add(viabLocked);
-    if (isConv && window.getDetectorForDye) {
-      const det = window.getDetectorForDye(viabLocked, inst);
-      if (det) usedDetectors.add(det.id);
-    }
-  } else {
-    // Auto-pick viability from viability pool only
-    const viabPool = [...VIAB_DYES].filter(d => {
+  // 1. Assign viability
+  let viabDye = viabLocked;
+  if (!viabDye) {
+    viabDye = [...VIAB_DYES].find(d => {
       if (isConv && window.getDetectorForDye) {
         const det = window.getDetectorForDye(d, inst);
         return det && !usedDetectors.has(det.id);
       }
       return window.DYE_EMISSION && window.DYE_EMISSION[d];
-    });
-    const pickedViab = viabPool[0] || '';
-    if (pickedViab) {
-      assignments.push({ marker: 'Viability', density: 'high', fluorochrome: pickedViab });
-      usedDyes.add(pickedViab);
-      if (isConv && window.getDetectorForDye) {
-        const det = window.getDetectorForDye(pickedViab, inst);
-        if (det) usedDetectors.add(det.id);
-      }
-    }
+    }) || '';
+  }
+  if (viabDye) {
+    tryAssign(viabDye);
+    assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabDye });
   }
 
-  // Assign each marker from interleaved pool (skip if user typed "viability")
-  const maxPerLaser = Math.ceil((markers.length + 1) / laserOrder.length) + 1;
-  const laserUsedCount = {};
-  laserOrder.forEach(l => { laserUsedCount[l] = 0; });
-
-  // Count viability laser usage
-  if (viabLocked || assignments.length) {
-    const viabDye = assignments[0] && assignments[0].fluorochrome;
-    if (viabDye) {
-      const vl = getLaser(viabDye);
-      if (laserUsedCount[vl] !== undefined) laserUsedCount[vl]++;
-    }
-  }
-
-  markers.forEach((m, i) => {
-    if (m.toLowerCase() === 'viability') return; // skip if user typed viability
+  // 2. Assign markers — cycle through lasers round-robin
+  let laserIdx = 0;
+  markerList.forEach((m, i) => {
     const density = i < 3 ? 'high' : i < 6 ? 'medium' : 'low';
     let assigned = '';
 
-    for (let j = 0; j < interleavedPool.length; j++) {
-      const candidate = interleavedPool[j];
-      if (usedDyes.has(candidate)) continue;
+    // Try lasers in round-robin order starting from current laserIdx
+    for (let attempt = 0; attempt < laserOrder.length * 2; attempt++) {
+      const laser = laserOrder[(laserIdx + attempt) % laserOrder.length];
+      const candidates = byLaser[laser] || [];
+      for (const dye of candidates) {
+        if (tryAssign(dye)) {
+          assigned = dye;
+          laserIdx = (laserOrder.indexOf(laser) + 1) % laserOrder.length;
+          break;
+        }
+      }
+      if (assigned) break;
+    }
 
-      if (isConv && window.getDetectorForDye) {
-        const det = window.getDetectorForDye(candidate, inst);
-        if (!det) continue;
-        if (usedDetectors.has(det.id)) continue;
-        // Check high-severity spread conflicts
-        let hasConflict = false;
-        if (window.getSpreadConflict) {
-          for (const used of usedDyes) {
-            const conflict = window.getSpreadConflict(candidate, used);
-            if (conflict && conflict.severity === 'high') { hasConflict = true; break; }
-          }
+    // Fallback: any unused dye
+    if (!assigned) {
+      for (const dye of allDyes) {
+        if (!usedDyes.has(dye)) {
+          assigned = dye;
+          usedDyes.add(dye);
+          break;
         }
-        if (hasConflict) continue;
-        assigned = candidate;
-        usedDetectors.add(det.id);
-        break;
-      } else {
-        // Spectral: check SI
-        let worstSI = 0;
-        if (window.getSpectralSI) {
-          for (const used of usedDyes) {
-            const si = window.getSpectralSI(candidate, used, inst);
-            if (si > worstSI) worstSI = si;
-          }
-        }
-        if (worstSI > 0.7) continue;
-        // Don't pile onto one laser
-        const candLaser = getLaser(candidate);
-        if ((laserUsedCount[candLaser] || 0) >= maxPerLaser) continue;
-        assigned = candidate;
-        break;
       }
     }
 
-    if (assigned) {
-      usedDyes.add(assigned);
-      const al = getLaser(assigned);
-      if (laserUsedCount[al] !== undefined) laserUsedCount[al]++;
-    }
     assignments.push({ marker: m, density, fluorochrome: assigned });
   });
 
   pendingAutoBuild = assignments;
 
-  // Show proposal
   const propBody = document.getElementById('auto-proposal-body');
   propBody.innerHTML = assignments.map(a =>
     `<div style="font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:12px;justify-content:space-between">
@@ -1646,18 +1615,7 @@ function runAutoBuild() {
 
   document.getElementById('auto-proposal').style.display = '';
 }
-window.applyAutoBuild = function() {
-  panelRows = pendingAutoBuild.map((a) => ({
-    id: nextId++,
-    marker: a.marker,
-    density: a.density,
-    fluorochrome: a.fluorochrome
-  }));
-  closeModal('auto-modal');
-  renderPanelTable();
-  renderAll();
-  toast('Panel applied ✓');
-}
+  
 /* ════════════════════════════════════════════════════════════════
    EXPORT
    ════════════════════════════════════════════════════════════════ */
