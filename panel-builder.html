@@ -1480,43 +1480,71 @@ function runAutoBuild() {
   const isConv = currentMode === 'conventional';
   const laserOrder = inst.lasers || [];
 
-  const VIAB_DYES = new Set([
-    'LIVE/DEAD Aqua','LIVE/DEAD Blue','LIVE/DEAD Near-IR',
-    'Ghost Violet 450','Ghost Violet 510','Ghost Red 780',
-    'Zombie Aqua','Zombie Yellow','Zombie Red','Zombie NIR',
-    '7-AAD','PI','TO-PRO-3','DAPI','Hoechst 33342','BUV395','BUV496'
-  ]);
+  // Use DYES catalog (dyes.js) — fall back to DYE_EMISSION keys if unavailable
+  const DYES = window.DYES || {};
 
-  // Helper: which laser does a dye belong to?
-  function getDyeLaser(dye) {
-    if (isConv && window.getDetectorForDye) {
-      const det = window.getDetectorForDye(dye, inst);
-      return det ? det.laser : null;
-    }
-    const em = window.DYE_EMISSION && window.DYE_EMISSION[dye];
+  // Laser abbreviation → nm map (matches dyes.js excite field)
+  const EXCITE_MAP = { UV:355, V:405, B:488, YG:561, R:638 };
+
+  function getDyeExciteNm(dyeName) {
+    const d = DYES[dyeName];
+    if (d && d.excite) return EXCITE_MAP[d.excite] || null;
+    // Fallback: derive from DYE_EMISSION peak
+    const em = window.DYE_EMISSION && window.DYE_EMISSION[dyeName];
     if (!em) return null;
     const exc = laserOrder.filter(l => em.peak > l + 10);
     return exc.length ? exc[exc.length-1] : null;
   }
 
-  // Build candidate pool — no viability dyes, valid for this instrument
-  const allDyes = Object.keys(window.DYE_EMISSION || {}).filter(d => {
-    if (VIAB_DYES.has(d)) return false;
+  function getBrightness(dyeName) {
+    const d = DYES[dyeName];
+    if (!d) return 2;
+    return { 'very-high':4, 'high':3, 'medium':2, 'low':1 }[d.brightness] || 2;
+  }
+
+  function getResolution(dyeName) {
+    const d = DYES[dyeName];
+    return d ? (d.resolution || 2) : 2;
+  }
+
+  function getSpillover(dyeName) {
+    const d = DYES[dyeName];
+    return d ? (d.spillover || 2) : 2;
+  }
+
+  function isViabilityDye(dyeName) {
+    const d = DYES[dyeName];
+    return d && d.category === 'Viability';
+  }
+
+  // Score how well a dye fits a marker density
+  // Higher = better fit
+  function densityFitScore(dyeName, density) {
+    const res = getResolution(dyeName);  // 1=dim, 4=bright
+    const sp  = getSpillover(dyeName);   // 1=clean, 4=high spillover
+    if (density === 'low' || density === 'very low') {
+      // Need bright, clean dye
+      return res * 2 - sp;
+    } else if (density === 'high') {
+      // Dim dye is fine, save bright slots; low spillover still preferred
+      return (5 - res) + (5 - sp);
+    } else {
+      // Medium: balance
+      return res + (5 - sp);
+    }
+  }
+
+  // Build candidate pool — exclude viability dyes from general pool
+  const allDyes = Object.keys(DYES).filter(d => {
+    if (isViabilityDye(d)) return false;
     if (isConv && window.getDetectorForDye) {
       return window.getDetectorForDye(d, inst) !== null;
     }
-    return true;
+    // Spectral: must be in DYE_EMISSION
+    return window.DYE_EMISSION && (d in window.DYE_EMISSION);
   });
 
-  // Bucket dyes by laser
-  const byLaser = {};
-  laserOrder.forEach(l => { byLaser[l] = []; });
-  allDyes.forEach(d => {
-    const l = getDyeLaser(d);
-    if (l && byLaser[l]) byLaser[l].push(d);
-  });
-
-  // Max dyes per laser = ceil(total markers / num lasers) + 1
+  // Count how many markers per laser we can afford
   const maxPerLaser = Math.max(1, Math.round(markerList.length / laserOrder.length));
 
   const usedDyes = new Set();
@@ -1524,8 +1552,15 @@ function runAutoBuild() {
   const laserCount = {};
   laserOrder.forEach(l => { laserCount[l] = 0; });
 
-  function tryAssign(dye) {
+  // Check if a dye can be assigned without conflict
+  function canAssign(dye, density) {
     if (!dye || usedDyes.has(dye)) return false;
+    const laser = getDyeExciteNm(dye);
+    if (!laser) return false;
+
+    // Laser budget check
+    if ((laserCount[laser] || 0) >= maxPerLaser) return false;
+
     if (isConv && window.getDetectorForDye) {
       const det = window.getDetectorForDye(dye, inst);
       if (!det || usedDetectors.has(det.id)) return false;
@@ -1535,20 +1570,44 @@ function runAutoBuild() {
           if (c && c.severity === 'high') return false;
         }
       }
-      usedDyes.add(dye);
-      usedDetectors.add(det.id);
     } else {
+      // Spectral: SI check
       if (window.getSpectralSI) {
         for (const used of usedDyes) {
           if (window.getSpectralSI(dye, used, inst) > 0.7) return false;
         }
       }
-      const l = getDyeLaser(dye);
-      if (l && (laserCount[l] || 0) >= maxPerLaser) return false;
-      usedDyes.add(dye);
-      if (l) laserCount[l] = (laserCount[l] || 0) + 1;
     }
     return true;
+  }
+
+  function assign(dye) {
+    usedDyes.add(dye);
+    const laser = getDyeExciteNm(dye);
+    if (laser) laserCount[laser] = (laserCount[laser] || 0) + 1;
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      if (det) usedDetectors.add(det.id);
+    }
+  }
+
+  // Pick best dye for a given density from candidates
+  function pickBest(density, candidatePool) {
+    const valid = candidatePool.filter(d => canAssign(d, density));
+    if (!valid.length) return '';
+    // Sort by: laser balance first, then density fit, then low spillover
+    valid.sort((a, b) => {
+      const laserA = getDyeExciteNm(a) || 0;
+      const laserB = getDyeExciteNm(b) || 0;
+      const countA = laserCount[laserA] || 0;
+      const countB = laserCount[laserB] || 0;
+      if (countA !== countB) return countA - countB; // prefer less-used laser
+      const fitA = densityFitScore(a, density);
+      const fitB = densityFitScore(b, density);
+      if (fitB !== fitA) return fitB - fitA; // higher fit score wins
+      return getSpillover(a) - getSpillover(b); // lower spillover wins
+    });
+    return valid[0];
   }
 
   const assignments = [];
@@ -1556,62 +1615,67 @@ function runAutoBuild() {
   // 1. Assign viability
   let viabDye = viabLocked;
   if (!viabDye) {
-    viabDye = [...VIAB_DYES].find(d => {
+    const viabPool = Object.keys(DYES).filter(d => {
+      if (!isViabilityDye(d)) return false;
       if (isConv && window.getDetectorForDye) {
         const det = window.getDetectorForDye(d, inst);
         return det && !usedDetectors.has(det.id);
       }
-      return window.DYE_EMISSION && window.DYE_EMISSION[d];
-    }) || '';
+      return window.DYE_EMISSION && (d in window.DYE_EMISSION);
+    });
+    // Prefer UV or Violet amine-reactive viability dyes
+    const preferred = viabPool.filter(d => {
+      const ex = getDyeExciteNm(d);
+      return ex === 355 || ex === 405;
+    });
+    viabDye = preferred[0] || viabPool[0] || '';
   }
   if (viabDye) {
-    tryAssign(viabDye);
+    assign(viabDye);
     assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabDye });
   }
 
-  // 2. Assign markers — cycle through lasers round-robin
-  let laserIdx = 0;
-  markerList.forEach((m, i) => {
-    const density = i < 3 ? 'high' : i < 6 ? 'medium' : 'low';
-    let assigned = '';
+  // 2. Sort markers by density — assign dim antigens (low/very low) first
+  // because they need the brightest dyes; those are scarcer
+  const DENSITY_ORDER = ['very low', 'low', 'medium', 'high'];
+  const markerObjs = markerList.map((m, i) => {
+    // Try to look up density from markers.js if available
+    const known = window.MARKERS && window.MARKERS[m.toLowerCase()];
+    const density = known ? known.density : (i < 3 ? 'high' : i < 6 ? 'medium' : 'low');
+    return { marker: m, density };
+  });
+  markerObjs.sort((a, b) =>
+    DENSITY_ORDER.indexOf(a.density) - DENSITY_ORDER.indexOf(b.density)
+  );
 
-    // Try lasers in round-robin order starting from current laserIdx
-    for (let attempt = 0; attempt < laserOrder.length * 2; attempt++) {
-      const laser = laserOrder[(laserIdx + attempt) % laserOrder.length];
-      const candidates = byLaser[laser] || [];
-      for (const dye of candidates) {
-        if (tryAssign(dye)) {
-          assigned = dye;
-          laserIdx = (laserOrder.indexOf(laser) + 1) % laserOrder.length;
-          break;
-        }
-      }
-      if (assigned) break;
-    }
+  // 3. Assign each marker
+  markerObjs.forEach(({ marker, density }) => {
+    const dye = pickBest(density, allDyes);
+    if (dye) assign(dye);
+    assignments.push({ marker, density, fluorochrome: dye || '' });
+  });
 
-    // Fallback: any unused dye
-    if (!assigned) {
-      for (const dye of allDyes) {
-        if (!usedDyes.has(dye)) {
-          assigned = dye;
-          usedDyes.add(dye);
-          break;
-        }
-      }
-    }
-
-    assignments.push({ marker: m, density, fluorochrome: assigned });
+  // Re-sort assignments back to original marker order for display
+  const origOrder = markerList.reduce((acc, m, i) => { acc[m] = i; return acc; }, {});
+  assignments.sort((a, b) => {
+    if (a.marker === 'Viability') return -1;
+    if (b.marker === 'Viability') return 1;
+    return (origOrder[a.marker] || 0) - (origOrder[b.marker] || 0);
   });
 
   pendingAutoBuild = assignments;
 
   const propBody = document.getElementById('auto-proposal-body');
-  propBody.innerHTML = assignments.map(a =>
-    `<div style="font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:12px;justify-content:space-between">
-      <span style="color:var(--text)">${_esc(a.marker)}</span>
+  propBody.innerHTML = assignments.map(a => {
+    const d = DYES[a.fluorochrome];
+    const laser = a.fluorochrome ? getDyeExciteNm(a.fluorochrome) : null;
+    const laserLabel = laser ? laser + ' nm' : '';
+    return `<div style="font-size:.78rem;padding:5px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center">
+      <span style="color:var(--text)">${_esc(a.marker)} <span style="color:var(--muted);font-size:.65rem">(${a.density})</span></span>
+      <span style="color:var(--muted);font-size:.65rem;font-family:var(--font)">${laserLabel}</span>
       <span style="font-family:var(--font);color:var(--accent2)">${_esc(a.fluorochrome||'—')}</span>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
   document.getElementById('auto-proposal').style.display = '';
 }
