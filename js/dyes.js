@@ -354,3 +354,4 @@ function classifyDyeForMarker(dyeName, marker) {
   return { fit:'discouraged',
     reason:`medium-density antigen — both brightness (res ${res}) and spillover (sp ${sp}) are suboptimal` };
 }
+window.DYES = DYES;
