@@ -1674,15 +1674,6 @@ function runAutoBuild() {
   if (viabDye) {
     assign(viabDye);
         }
-        if (!blocked) {
-          assigned = dye;
-          usedDyes.add(dye);
-          const al = getDyeExciteNm(dye);
-          if (al) laserCount[String(al)] = (laserCount[String(al)] || 0) + 1;
-          break;
-        }
-      }
-    }
     assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabDye });
   }
 
@@ -1706,6 +1697,29 @@ function runAutoBuild() {
     // Fallback: relax laser cap, ignore co-expression blocking
     if (!assigned) {
       for (const dye of allDyes) {
+        if (usedDyes.has(dye)) continue;
+        let blocked = false;
+        if (window.getSpectralSI) {
+          for (const used of usedDyes) {
+            const usedMarkerObj = assignments.find(a => a.fluorochrome === used);
+            const usedMarker = usedMarkerObj ? usedMarkerObj.marker : '';
+            if (canShare(marker, usedMarker)) continue;
+            if (window.getSpectralSI(dye, used, inst) > 0.85) { blocked = true; break; }
+          }
+        }
+        if (!blocked) {
+          assigned = dye;
+          usedDyes.add(dye);
+          const al = getDyeExciteNm(dye);
+          if (al) laserCount[String(al)] = (laserCount[String(al)] || 0) + 1;
+          break;
+        }
+      }
+    }
+    // Fallback: relax laser cap, ignore co-expression blocking
+    if (!assigned) {
+      for (let fi = 0; fi < allDyes.length; fi++) {
+        const dye = allDyes[fi];
         if (usedDyes.has(dye)) continue;
         let blocked = false;
         if (window.getSpectralSI) {
