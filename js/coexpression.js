@@ -219,3 +219,4 @@ function classifyMarkerPair(markerA, markerB) {
   }
   return { status: 'problematic', relation: rule.relation, confidence: rule.confidence };
 }
+ window.COEXPRESSION_RULES = COEXPRESSION_RULES
