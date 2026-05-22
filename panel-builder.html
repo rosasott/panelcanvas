@@ -1526,8 +1526,10 @@ function runAutoBuild() {
       // Low density → need BRIGHT dye (high resolution rank), spillover secondary
       return res * 3 - sp;
     } else if (density === 'high') {
-      // High density → prefer DIM dye (low resolution rank), save bright for rare markers
-      return (5 - res) * 2 + (5 - sp);
+      // High density → dim dye preferred, but spillover equally important
+      // Penalize high spillover heavily — PerCP/PerCP-Cy5.5 should not go on abundant antigens
+      if (sp >= 4) return -10; // hard penalty for very high spillover dyes
+      return (5 - res) + (5 - sp) * 2;
     } else {
       // Medium: balance
       return res + (5 - sp);
