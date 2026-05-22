@@ -297,6 +297,41 @@ const DYES = {
   // Tonbo redFluor
   'redFluor 710':     { excite:'R', spillover:1, resolution:3, peak:710, sigma:50, brightness:'high',      category:'Tonbo', color:'#A02838' },
 
+  // ════════════════════════════════════════════════════════════
+  // ── BD Horizon Real Dyes (RB/RV/RY/RR series) ───────────────
+  // Spectral-optimized polymer dyes for BD FACSymphony/FACSDiscover
+  // Brightness ranks from BD table (1-4 dots = low/medium/high/very-high)
+  // Spillover ranks from BD table (1-4 scale)
+  // ════════════════════════════════════════════════════════════
+
+  // Violet laser (405nm)
+  'RV544':  { excite:'V', spillover:2, resolution:2, peak:544, sigma:42, brightness:'medium',    category:'BD-Real', color:'#8060A0' },
+  'RV828':  { excite:'V', spillover:1, resolution:2, peak:828, sigma:55, brightness:'medium',    category:'BD-Real', color:'#401840' },
+
+  // Blue laser (488nm)
+  'RB545':  { excite:'B', spillover:1, resolution:2, peak:545, sigma:40, brightness:'medium',    category:'BD-Real', color:'#60A040' },
+  'RB575':  { excite:'B', spillover:1, resolution:2, peak:575, sigma:42, brightness:'medium',    category:'BD-Real', color:'#A08020' },
+  'RB613':  { excite:'B', spillover:2, resolution:4, peak:613, sigma:44, brightness:'high',      category:'BD-Real', color:'#C06020' },
+  'RB670':  { excite:'B', spillover:2, resolution:4, peak:670, sigma:46, brightness:'high',      category:'BD-Real', color:'#B04020' },
+  'RB705':  { excite:'B', spillover:2, resolution:4, peak:705, sigma:48, brightness:'high',      category:'BD-Real', color:'#A03020' },
+  'RB744':  { excite:'B', spillover:1, resolution:4, peak:744, sigma:50, brightness:'high',      category:'BD-Real', color:'#902020' },
+  'RB780':  { excite:'B', spillover:1, resolution:4, peak:780, sigma:52, brightness:'high',      category:'BD-Real', color:'#801828' },
+  'RB824':  { excite:'B', spillover:1, resolution:3, peak:824, sigma:55, brightness:'high',      category:'BD-Real', color:'#601830' },
+
+  // Yellow-Green laser (561nm)
+  'RY586':  { excite:'YG', spillover:1, resolution:4, peak:586, sigma:40, brightness:'high',     category:'BD-Real', color:'#E08020' },
+  'RY610':  { excite:'YG', spillover:1, resolution:3, peak:610, sigma:42, brightness:'high',     category:'BD-Real', color:'#C06020' },
+  'RY655':  { excite:'YG', spillover:3, resolution:4, peak:655, sigma:45, brightness:'high',     category:'BD-Real', color:'#B04030' },
+  'RY703':  { excite:'YG', spillover:2, resolution:4, peak:703, sigma:48, brightness:'high',     category:'BD-Real', color:'#A03030' },
+  'RY743':  { excite:'YG', spillover:2, resolution:4, peak:743, sigma:50, brightness:'high',     category:'BD-Real', color:'#902030' },
+  'RY775':  { excite:'YG', spillover:2, resolution:4, peak:775, sigma:52, brightness:'high',     category:'BD-Real', color:'#801828' },
+
+  // Red laser (638nm)
+  'RR688':  { excite:'R', spillover:1, resolution:4, peak:688, sigma:44, brightness:'high',      category:'BD-Real', color:'#D02020' },
+  'R718':   { excite:'R', spillover:1, resolution:4, peak:718, sigma:48, brightness:'high',      category:'BD-Real', color:'#B01828' },
+  'RR745':  { excite:'R', spillover:1, resolution:4, peak:745, sigma:50, brightness:'high',      category:'BD-Real', color:'#901020' },
+  'RR780':  { excite:'R', spillover:1, resolution:3, peak:780, sigma:52, brightness:'high',      category:'BD-Real', color:'#701020' },
+  'RR820':  { excite:'R', spillover:1, resolution:2, peak:820, sigma:55, brightness:'medium',    category:'BD-Real', color:'#601030' },
 };
 
 // ── Brightness rank (for antigen density recommendations) ────────────────────
@@ -354,39 +389,4 @@ function classifyDyeForMarker(dyeName, marker) {
   return { fit:'discouraged',
     reason:`medium-density antigen — both brightness (res ${res}) and spillover (sp ${sp}) are suboptimal` };
 }
-// ════════════════════════════════════════════════════════════
-  // ── BD Horizon Real Dyes (RB/RV/RY/RR series) ───────────────
-  // Spectral-optimized polymer dyes for BD FACSymphony/FACSDiscover
-  // Brightness ranks from BD table (1-4 dots = low/medium/high/very-high)
-  // Spillover ranks from BD table (1-4 scale)
-  // ════════════════════════════════════════════════════════════
-
-  // Violet laser (405nm)
-  'RV544':  { excite:'V', spillover:2, resolution:2, peak:544, sigma:42, brightness:'medium',    category:'BD-Real', color:'#8060A0' },
-  'RV828':  { excite:'V', spillover:1, resolution:2, peak:828, sigma:55, brightness:'medium',    category:'BD-Real', color:'#401840' },
-
-  // Blue laser (488nm)
-  'RB545':  { excite:'B', spillover:1, resolution:2, peak:545, sigma:40, brightness:'medium',    category:'BD-Real', color:'#60A040' },
-  'RB575':  { excite:'B', spillover:1, resolution:2, peak:575, sigma:42, brightness:'medium',    category:'BD-Real', color:'#A08020' },
-  'RB613':  { excite:'B', spillover:2, resolution:4, peak:613, sigma:44, brightness:'high',      category:'BD-Real', color:'#C06020' },
-  'RB670':  { excite:'B', spillover:2, resolution:4, peak:670, sigma:46, brightness:'high',      category:'BD-Real', color:'#B04020' },
-  'RB705':  { excite:'B', spillover:2, resolution:4, peak:705, sigma:48, brightness:'high',      category:'BD-Real', color:'#A03020' },
-  'RB744':  { excite:'B', spillover:1, resolution:4, peak:744, sigma:50, brightness:'high',      category:'BD-Real', color:'#902020' },
-  'RB780':  { excite:'B', spillover:1, resolution:4, peak:780, sigma:52, brightness:'high',      category:'BD-Real', color:'#801828' },
-  'RB824':  { excite:'B', spillover:1, resolution:3, peak:824, sigma:55, brightness:'high',      category:'BD-Real', color:'#601830' },
-
-  // Yellow-Green laser (561nm)
-  'RY586':  { excite:'YG', spillover:1, resolution:4, peak:586, sigma:40, brightness:'high',     category:'BD-Real', color:'#E08020' },
-  'RY610':  { excite:'YG', spillover:1, resolution:3, peak:610, sigma:42, brightness:'high',     category:'BD-Real', color:'#C06020' },
-  'RY655':  { excite:'YG', spillover:3, resolution:4, peak:655, sigma:45, brightness:'high',     category:'BD-Real', color:'#B04030' },
-  'RY703':  { excite:'YG', spillover:2, resolution:4, peak:703, sigma:48, brightness:'high',     category:'BD-Real', color:'#A03030' },
-  'RY743':  { excite:'YG', spillover:2, resolution:4, peak:743, sigma:50, brightness:'high',     category:'BD-Real', color:'#902030' },
-  'RY775':  { excite:'YG', spillover:2, resolution:4, peak:775, sigma:52, brightness:'high',     category:'BD-Real', color:'#801828' },
-
-  // Red laser (638nm)
-  'RR688':  { excite:'R', spillover:1, resolution:4, peak:688, sigma:44, brightness:'high',      category:'BD-Real', color:'#D02020' },
-  'R718':   { excite:'R', spillover:1, resolution:4, peak:718, sigma:48, brightness:'high',      category:'BD-Real', color:'#B01828' },
-  'RR745':  { excite:'R', spillover:1, resolution:4, peak:745, sigma:50, brightness:'high',      category:'BD-Real', color:'#901020' },
-  'RR780':  { excite:'R', spillover:1, resolution:3, peak:780, sigma:52, brightness:'high',      category:'BD-Real', color:'#701020' },
-  'RR820':  { excite:'R', spillover:1, resolution:2, peak:820, sigma:55, brightness:'medium',    category:'BD-Real', color:'#601030' },
 window.DYES = DYES;
