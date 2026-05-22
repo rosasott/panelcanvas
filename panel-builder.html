@@ -1,0 +1,1862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Panel Builder — PanelCanvas</title>
+<style>
+/* ── reset & tokens ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #0e1117;
+  --surface:   #161b26;
+  --surface2:  #1e2535;
+  --border:    #2a3347;
+  --border2:   #3a4560;
+  --text:      #e8eaf0;
+  --muted:     #7a8399;
+  --accent:    #4f8ef7;
+  --accent2:   #6ba3ff;
+  --ok:        #34d399;
+  --warn:      #fbbf24;
+  --danger:    #f87171;
+  --spectral:  #a78bfa;
+  --conv:      #38bdf8;
+  --dual-a:    #a78bfa;
+  --dual-b:    #38bdf8;
+  --radius:    8px;
+  --radius-lg: 14px;
+  --font:      'IBM Plex Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+html { font-size: 14px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+/* ── nav ─────────────────────────────────────────────────────── */
+nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  position: sticky; top: 0; z-index: 200;
+}
+.nav-logo { font-family: var(--font); font-size: 1rem; font-weight: 700;
+  color: var(--accent); letter-spacing: -0.02em; }
+.nav-version { font-size: .7rem; background: var(--border); color: var(--muted);
+  padding: 2px 7px; border-radius: 99px; }
+nav a { color: var(--muted); text-decoration: none; font-size: .85rem; }
+nav a:hover { color: var(--text); }
+.nav-spacer { flex: 1; }
+
+/* ── layout shell ────────────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 0;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.main {
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── sidebar widgets ─────────────────────────────────────────── */
+.widget { display: flex; flex-direction: column; gap: 8px; }
+.widget-label {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── instrument picker ───────────────────────────────────────── */
+.inst-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inst-group-label {
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  margin-top: 8px;
+  padding-left: 2px;
+}
+.inst-group-label:first-child { margin-top: 0; }
+.inst-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+  width: 100%;
+}
+.inst-btn:hover { border-color: var(--border2); background: #252d40; }
+.inst-btn.active {
+  border-color: var(--accent);
+  background: rgba(79,142,247,.08);
+}
+.inst-btn-name {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.inst-btn-badge {
+  font-size: .65rem;
+  color: var(--muted);
+  font-family: var(--font);
+}
+.type-pill {
+  display: inline-block;
+  font-size: .58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 6px;
+  border-radius: 99px;
+  margin-right: 4px;
+}
+.pill-spectral { background: rgba(167,139,250,.18); color: var(--spectral); }
+.pill-conv     { background: rgba(56,189,248,.18);  color: var(--conv); }
+.pill-dual     { background: linear-gradient(90deg,rgba(167,139,250,.2),rgba(56,189,248,.2));
+                 color: #c4b5fd; }
+
+/* ── mode toggle (dual instruments) ─────────────────────────── */
+.mode-toggle-wrap {
+  display: none;
+  align-items: center;
+  gap: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  width: 100%;
+}
+.mode-toggle-wrap.visible { display: flex; }
+.mode-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 7px 0;
+  cursor: pointer;
+  border-radius: 99px;
+  transition: background .15s, color .15s;
+  text-align: center;
+}
+.mode-btn.active-spectral {
+  background: rgba(167,139,250,.25);
+  color: var(--spectral);
+}
+.mode-btn.active-conv {
+  background: rgba(56,189,248,.25);
+  color: var(--conv);
+}
+
+/* ── sidebar selects / inputs ────────────────────────────────── */
+select, input[type="range"], input[type="number"] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: .82rem;
+  padding: 6px 10px;
+  width: 100%;
+  outline: none;
+}
+select:focus, input:focus { border-color: var(--accent); }
+.threshold-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.threshold-val {
+  font-family: var(--font);
+  font-size: .8rem;
+  color: var(--accent);
+  min-width: 34px;
+}
+.threshold-labels { display: flex; justify-content: space-between;
+  font-size: .65rem; color: var(--muted); }
+
+.laser-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.laser-chip {
+  font-family: var(--font);
+  font-size: .65rem;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  background: var(--surface2);
+}
+
+/* ── stat pills ──────────────────────────────────────────────── */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.stat-label { font-size: .62rem; color: var(--muted); margin-bottom: 2px;
+  text-transform: uppercase; letter-spacing: .06em; }
+.stat-val { font-family: var(--font); font-size: 1rem; font-weight: 700;
+  color: var(--text); }
+.stat-sub { font-size: .6rem; color: var(--muted); margin-top: 1px; }
+
+/* ── action buttons ──────────────────────────────────────────── */
+.btn {
+  border: none; border-radius: var(--radius); cursor: pointer;
+  font-family: var(--font-sans); font-weight: 600; padding: 8px 14px;
+  font-size: .8rem; transition: opacity .15s, background .15s;
+}
+.btn:hover { opacity: .88; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-ghost   { background: var(--surface2); color: var(--muted);
+  border: 1px solid var(--border); }
+.btn-sm { padding: 5px 10px; font-size: .72rem; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-full { width: 100%; }
+
+/* ── upload area ─────────────────────────────────────────────── */
+.upload-area {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-align: center;
+  font-size: .72rem;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color .15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.upload-area:hover { border-color: var(--accent); color: var(--accent); }
+.upload-area input { display: none; }
+
+/* ── main panel table ────────────────────────────────────────── */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+.section-title {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow-y: auto;
+  max-height: 400px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+thead th {
+  background: var(--surface2);
+  text-align: left;
+  padding: 9px 12px;
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(79,142,247,.04); }
+td { padding: 8px 12px; vertical-align: middle; }
+td select, td input[type="text"] {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: .8rem;
+  padding: 3px 6px;
+  width: 100%;
+  outline: none;
+}
+td select:focus, td input[type="text"]:focus {
+  border-color: var(--accent);
+  background: var(--surface2);
+}
+.si-badge {
+  display: inline-block;
+  font-family: var(--font);
+  font-size: .72rem;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-weight: 700;
+}
+.si-ok   { background: rgba(52,211,153,.15); color: var(--ok); }
+.si-warn { background: rgba(251,191,36,.15);  color: var(--warn); }
+.si-bad  { background: rgba(248,113,113,.15); color: var(--danger); }
+.si-none { color: var(--muted); }
+.del-btn {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 1rem; padding: 2px 6px; border-radius: 5px;
+  transition: color .15s, background .15s;
+}
+.del-btn:hover { color: var(--danger); background: rgba(248,113,113,.12); }
+.add-row-btn {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: .78rem; padding: 10px 12px; text-align: left; width: 100%;
+  transition: color .15s; display: flex; align-items: center; gap: 6px;
+}
+.add-row-btn:hover { color: var(--accent); }
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .85rem;
+}
+.empty-icon { font-size: 1.5rem; margin-bottom: 8px; }
+
+/* ── SPECTRAL: SI matrix ─────────────────────────────────────── */
+.matrix-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: auto;
+  max-height: 420px;
+}
+.matrix-title { font-size: .7rem; color: var(--muted); padding: 10px 14px;
+  border-bottom: 1px solid var(--border); text-transform: uppercase;
+  letter-spacing: .08em; font-weight: 600; }
+.matrix-table { border-collapse: collapse; font-size: .72rem; font-family: var(--font); }
+.matrix-table th, .matrix-table td {
+  border: 1px solid var(--border);
+  padding: 4px 7px;
+  text-align: center;
+  min-width: 50px;
+  white-space: nowrap;
+}
+.matrix-table th { background: var(--surface2); color: var(--muted); font-weight: 600; }
+.mt-diag { background: var(--surface2); color: var(--border2); }
+.mt-ok   { background: rgba(52,211,153,.10);  color: var(--ok); }
+.mt-warn { background: rgba(251,191,36,.10);  color: var(--warn); }
+.mt-bad  { background: rgba(248,113,113,.12); color: var(--danger); cursor: pointer; }
+.mt-bio  { opacity: .4; }
+.mt-empty { color: var(--border2); }
+
+/* ── CONVENTIONAL: detector grid ────────────────────────────── */
+#conv-view { display: none; flex-direction: column; gap: 20px; }
+#conv-view.visible { display: flex; }
+#spectral-view { display: none; flex-direction: column; gap: 20px; }
+#spectral-view.visible { display: flex; }
+
+.det-grid-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.det-grid-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: .7rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .08em; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.det-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+}
+.det-cell {
+  background: var(--surface2);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 72px;
+  transition: background .15s;
+}
+.det-cell.status-empty  { background: var(--surface2); }
+.det-cell.status-ok     { background: rgba(52,211,153,.07); }
+.det-cell.status-clash  { background: rgba(248,113,113,.1); }
+.det-laser {
+  font-size: .58rem; text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 700; margin-bottom: 1px;
+}
+.det-name { font-size: .7rem; font-weight: 600; color: var(--text); }
+.det-filter { font-family: var(--font); font-size: .62rem; color: var(--muted); }
+.det-dye {
+  font-size: .68rem;
+  font-family: var(--font);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  background: rgba(79,142,247,.15);
+  color: var(--accent2);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 4px;
+}
+.det-dye.clash { background: rgba(248,113,113,.2); color: var(--danger); }
+.det-marker { font-size: .58rem; color: var(--muted); }
+.det-empty-label { font-size: .62rem; color: var(--border2); font-style: italic; }
+
+/* ── spread conflicts panel ──────────────────────────────────── */
+.conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conflict-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: .75rem;
+}
+.conflict-card.level-high, .conflict-card.level-detector {
+  border-left-color: var(--danger);
+}
+.conflict-card.level-moderate { border-left-color: var(--warn); }
+.conflict-pair {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: .78rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.conflict-type {
+  display: inline-block;
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 1px 6px;
+  border-radius: 99px;
+  margin-right: 6px;
+}
+.ct-detector  { background: rgba(248,113,113,.2); color: var(--danger); }
+.ct-tandem    { background: rgba(251,191,36,.18);  color: var(--warn); }
+.ct-spread    { background: rgba(167,139,250,.18); color: var(--spectral); }
+.conflict-note { color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.no-conflicts {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .8rem;
+}
+
+/* ── modal ───────────────────────────────────────────────────── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.6);
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 420px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-close {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 1.2rem; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal label { font-size: .78rem; color: var(--muted); display: block; margin-bottom: 4px; }
+.modal input[type="text"], .modal select, .modal textarea {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-family: var(--font-sans);
+  font-size: .82rem; padding: 8px 10px; width: 100%; outline: none;
+  resize: vertical;
+}
+.modal input:focus, .modal select:focus, .modal textarea:focus { border-color: var(--accent); }
+.suggested-dyes { display: flex; flex-wrap: wrap; gap: 5px; }
+.sug-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 99px; font-size: .68rem; font-family: var(--font);
+  padding: 3px 10px; cursor: pointer; color: var(--text);
+  transition: border-color .12s, background .12s;
+}
+.sug-chip:hover { border-color: var(--accent); background: rgba(79,142,247,.1); }
+.sug-chip.selected { border-color: var(--accent); background: rgba(79,142,247,.18); color: var(--accent); }
+
+/* ── auto-build modal ────────────────────────────────────────── */
+.auto-mode-tabs { display: flex; gap: 0; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; }
+.auto-tab { flex: 1; background: transparent; border: none; color: var(--muted);
+  font-size: .75rem; padding: 7px; cursor: pointer; transition: background .12s, color .12s; }
+.auto-tab.active { background: rgba(79,142,247,.15); color: var(--accent); font-weight: 600; }
+.viability-row { display: flex; gap: 8px; align-items: center; }
+
+/* ── spectral overlay (mini) ─────────────────────────────────── */
+.overlay-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.overlay-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: .7rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .08em; font-weight: 600;
+}
+canvas#overlay-canvas {
+  display: block;
+  width: 100%;
+  height: 160px;
+  background: var(--surface2);
+}
+
+/* ── scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── toast ───────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); padding: 8px 18px; border-radius: 99px;
+  font-size: .8rem; z-index: 999;
+  opacity: 0; transition: opacity .2s;
+  pointer-events: none;
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ─────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">PanelCanvas</span>
+  <span class="nav-version">v0.4 · MSK Fleet</span>
+  <a href="index.html">Home</a>
+  <a href="panel-builder.html">Panel Builder</a>
+  <span class="nav-spacer"></span>
+</nav>
+
+<!-- ── SHELL ───────────────────────────────────────────────── -->
+<div class="shell">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Instrument picker -->
+    <div class="widget">
+      <div class="widget-label">Instrument</div>
+      <div class="inst-grid" id="inst-grid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- Mode toggle (dual-mode instruments only) -->
+    <div class="widget" id="mode-toggle-widget" style="display:none">
+      <div class="widget-label">Mode</div>
+      <div class="mode-toggle-wrap visible" id="mode-toggle">
+        <button class="mode-btn" id="mode-btn-spectral" onclick="setMode('spectral')">◈ Spectral</button>
+        <button class="mode-btn" id="mode-btn-conv"     onclick="setMode('conventional')">⊞ Conventional</button>
+      </div>
+    </div>
+
+    <!-- Sample type -->
+    <div class="widget">
+      <div class="widget-label">Sample type</div>
+      <select id="sample-type">
+        <option>PBMC</option>
+        <option>Tumor digest</option>
+        <option>Whole blood</option>
+        <option>Bone marrow</option>
+        <option>Lymph node</option>
+        <option>BAL / Bronchoalveolar</option>
+        <option>Other</option>
+      </select>
+    </div>
+
+    <!-- Conflict threshold (spectral only) -->
+    <div class="widget" id="threshold-widget">
+      <div class="widget-label">Conflict threshold (SI)</div>
+      <div class="threshold-row">
+        <input type="range" id="si-threshold" min="0.50" max="0.95" step="0.01" value="0.70"
+          oninput="document.getElementById('threshold-val').textContent=parseFloat(this.value).toFixed(2); renderAll()">
+        <span class="threshold-val" id="threshold-val">0.70</span>
+      </div>
+      <div class="threshold-labels"><span>Strict</span><span>Lenient</span></div>
+    </div>
+
+    <!-- Laser chips -->
+    <div class="widget">
+      <div class="widget-label">Laser lines</div>
+      <div class="laser-chips" id="laser-chips"></div>
+    </div>
+
+    <!-- Upload spectra (spectral only) -->
+    <div class="widget" id="upload-widget">
+      <div class="widget-label">Reference spectra (CSV)</div>
+      <label class="upload-area">
+        ↑ Upload your spectra CSV
+        <input type="file" id="spectra-upload" accept=".csv">
+      </label>
+      <button class="btn btn-ghost btn-sm" onclick="downloadSpectraTemplate()">↓ Download template</button>
+    </div>
+
+    <!-- Export -->
+    <div class="widget">
+      <button class="btn btn-ghost btn-full" onclick="exportCSV()">↓ Export panel CSV</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="widget">
+      <div class="widget-label">Summary</div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Markers</div>
+          <div class="stat-val" id="stat-markers">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Assigned dyes</div>
+          <div class="stat-val" id="stat-dyes">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label" id="stat-score-label">Worst SI</div>
+          <div class="stat-val" id="stat-score">—</div>
+          <div class="stat-sub" id="stat-score-sub">Excluding bio pairs</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Real conflicts</div>
+          <div class="stat-val" id="stat-conflicts">—</div>
+          <div class="stat-sub">Biologically relevant</div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── MAIN ─────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Panel table -->
+    <div class="section-head">
+      <span class="section-title">Panel composition</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="openAutoModal()">✨ Auto-build panel</button>
+        <button class="btn btn-ghost btn-sm" onclick="addRow()">+ Add marker</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="panel-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Marker</th>
+            <th>Density</th>
+            <th>Fluorochrome</th>
+            <th>Laser</th>
+            <th id="score-col-head">Worst SI</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="panel-tbody"></tbody>
+      </table>
+      <button class="add-row-btn" onclick="addRow()">
+        <span style="font-size:1rem">+</span> Add marker row
+      </button>
+    </div>
+
+    <!-- ── SPECTRAL VIEW ────────────────────────────────── -->
+    <div id="spectral-view">
+
+      <!-- Conflict legend -->
+      <div class="btn-row" style="font-size:.72rem; color:var(--muted); align-items:center; gap:14px">
+        <span>Conflicts</span>
+        <span style="display:flex;align-items:center;gap:5px">
+          <span class="si-badge si-bad">0.90</span> Real — fix needed
+        </span>
+        <span style="display:flex;align-items:center;gap:5px">
+          <span class="si-badge si-ok">0.42</span> Biologically OK — markers mutually exclusive
+        </span>
+      </div>
+
+      <!-- SI matrix -->
+      <div class="matrix-wrap">
+        <div class="matrix-title">Similarity matrix · Click a cell for spectral overlay</div>
+        <div id="matrix-container" style="padding:10px"></div>
+      </div>
+
+      <!-- Spectral overlay -->
+      <div class="overlay-panel">
+        <div class="overlay-head" id="overlay-title">Spectral overlay — select a matrix cell</div>
+        <canvas id="overlay-canvas" height="160"></canvas>
+      </div>
+
+    </div>
+
+    <!-- ── CONVENTIONAL VIEW ────────────────────────────── -->
+    <div id="conv-view">
+
+      <!-- Detector occupancy grid -->
+      <div class="det-grid-wrap">
+        <div class="det-grid-head">
+          <span>Detector occupancy</span>
+          <span style="font-size:.65rem">
+            <span style="color:var(--ok)">● Assigned</span> &nbsp;
+            <span style="color:var(--danger)">● Clash</span> &nbsp;
+            <span style="color:var(--border2)">○ Empty</span>
+          </span>
+        </div>
+        <div class="det-grid" id="det-grid"></div>
+      </div>
+
+      <!-- Spread / tandem conflicts -->
+      <div class="section-head">
+        <span class="section-title">Spillover &amp; tandem conflicts</span>
+      </div>
+      <div class="conflict-list" id="spread-conflict-list">
+        <div class="no-conflicts" id="no-conflicts-msg">No conflicts — panel looks clean ✓</div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<!-- ── ADD MARKER MODAL ─────────────────────────────────── -->
+<div class="modal-backdrop" id="add-modal">
+  <div class="modal">
+    <div class="modal-title">
+      Add marker
+      <button class="modal-close" onclick="closeModal('add-modal')">✕</button>
+    </div>
+    <div>
+      <label>Marker</label>
+      <input type="text" id="modal-marker" placeholder="e.g. CD3, CD8a, FOXP3" autocomplete="off"
+        oninput="updateSuggestedDyes(this.value)">
+    </div>
+    <div>
+      <label>Fluorochrome (optional)</label>
+      <input type="text" id="modal-fluoro" placeholder="Type or pick below" autocomplete="off">
+    </div>
+    <div>
+      <label>Suggested dyes</label>
+      <div class="suggested-dyes" id="suggested-dyes-container"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAddMarker()">Add to panel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── AUTO-BUILD MODAL ─────────────────────────────────── -->
+<div class="modal-backdrop" id="auto-modal">
+  <div class="modal" style="width:500px">
+    <div class="modal-title">
+      ✨ Auto-build panel
+      <button class="modal-close" onclick="closeModal('auto-modal')">✕</button>
+    </div>
+
+    <div>
+      <div class="widget-label" style="margin-bottom:6px">Mode</div>
+      <div class="auto-mode-tabs">
+        <button class="auto-tab active" id="auto-tab-scratch" onclick="setAutoTab('scratch')">From scratch</button>
+        <button class="auto-tab" id="auto-tab-fill"   onclick="setAutoTab('fill')">Fill gaps</button>
+        <button class="auto-tab" id="auto-tab-suggest" onclick="setAutoTab('suggest')">Suggest missing</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Markers (comma- or newline-separated)</label>
+      <textarea id="auto-markers" rows="6"
+        placeholder="CD3, CD4, CD8a, CD19, NK1.1, FoxP3&#10;&#10;Type marker names. Unknown names get density 'medium'."></textarea>
+    </div>
+
+    <div>
+      <label>Viability dye (lock before auto-building rest)</label>
+      <div class="viability-row">
+        <select id="auto-viab">
+          <option value="">— Let auto-builder pick —</option>
+          <!-- populated by JS from DYE_CATALOG when available -->
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('auto-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="runAutoBuild()">Generate panel</button>
+    </div>
+
+    <div id="auto-proposal" style="display:none">
+      <div class="section-title" style="margin-bottom:8px">Proposed panel</div>
+      <div id="auto-proposal-body"></div>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn btn-ghost" onclick="runAutoBuild()">Try again</button>
+        <button class="btn btn-primary" onclick="applyAutoBuild()">Apply to panel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── SCRIPTS ───────────────────────────────────────────── -->
+<script src="js/instruments.js"></script>
+<script src="js/conventional_spread.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/dyes.js"></script>
+<script src="js/markers.js"></script>
+<script src="js/coexpression.js"></script>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════ */
+let currentInstrumentId = 's6';
+let currentMode = 'spectral';   // 'spectral' | 'conventional'
+let panelRows = [];             // {id, marker, density, fluorochrome}
+let nextId = 1;
+let autoTabMode = 'scratch';
+let pendingAutoBuild = [];
+
+const DENSITIES = ['high', 'medium', 'low', 'very low'];
+
+/* ════════════════════════════════════════════════════════════════
+   INSTRUMENT PICKER
+   ════════════════════════════════════════════════════════════════ */
+function buildInstGrid() {
+  const grid = document.getElementById('inst-grid');
+  grid.innerHTML = '';
+
+  const groups = [
+    { label: 'Dual-mode (spectral / conventional)', ids: ['s6','a5se'] },
+    { label: 'Spectral only', ids: ['aurora5L','s8','a8','id7000'] },
+    { label: 'Conventional only', ids: ['fortessa1','fortessa2','cytoflexLX'] },
+  ];
+
+  groups.forEach(g => {
+    const gl = document.createElement('div');
+    gl.className = 'inst-group-label';
+    gl.textContent = g.label;
+    grid.appendChild(gl);
+
+    g.ids.forEach(id => {
+      const inst = INSTRUMENTS[id];
+      if (!inst) return;
+      const btn = document.createElement('button');
+      btn.className = 'inst-btn' + (id === currentInstrumentId ? ' active' : '');
+      btn.dataset.id = id;
+
+      const pillClass = inst.type === 'dual' ? 'pill-dual' :
+                        inst.type === 'spectral' ? 'pill-spectral' : 'pill-conv';
+      const pillLabel = inst.type === 'dual' ? 'Dual' :
+                        inst.type === 'spectral' ? 'Spectral' : 'Conv';
+
+      btn.innerHTML = `
+        <div class="inst-btn-name"><span class="type-pill ${pillClass}">${pillLabel}</span>${inst.name}</div>
+        <div class="inst-btn-badge">${inst.badge}</div>
+      `;
+      btn.onclick = () => selectInstrument(id);
+      grid.appendChild(btn);
+    });
+  });
+}
+
+function selectInstrument(id) {
+  currentInstrumentId = id;
+  const inst = INSTRUMENTS[id];
+  // Set mode to instrument's default
+  currentMode = inst.defaultMode || inst.type;
+  if (currentMode === 'dual') currentMode = 'spectral';
+
+  // Update active state in grid
+  document.querySelectorAll('.inst-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.id === id);
+  });
+
+  // Show/hide mode toggle
+  const modeWidget = document.getElementById('mode-toggle-widget');
+  modeWidget.style.display = inst.type === 'dual' ? '' : 'none';
+  updateModeToggleUI();
+
+  // Update laser chips
+  renderLaserChips(inst.lasers);
+
+  // Update score column label
+  updateScoreColLabel();
+
+  // Threshold + upload only for spectral
+  const isSpectral = currentMode === 'spectral';
+  document.getElementById('threshold-widget').style.display = isSpectral ? '' : 'none';
+  document.getElementById('upload-widget').style.display = isSpectral ? '' : 'none';
+
+  renderAll();
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  updateModeToggleUI();
+  updateScoreColLabel();
+
+  const isSpectral = mode === 'spectral';
+  document.getElementById('threshold-widget').style.display = isSpectral ? '' : 'none';
+  document.getElementById('upload-widget').style.display = isSpectral ? '' : 'none';
+
+  renderAll();
+}
+
+function updateModeToggleUI() {
+  const bs = document.getElementById('mode-btn-spectral');
+  const bc = document.getElementById('mode-btn-conv');
+  bs.className = 'mode-btn' + (currentMode === 'spectral' ? ' active-spectral' : '');
+  bc.className = 'mode-btn' + (currentMode === 'conventional' ? ' active-conv' : '');
+}
+
+function updateScoreColLabel() {
+  const lbl = document.getElementById('score-col-head');
+  lbl.textContent = currentMode === 'conventional' ? 'Conflict' : 'Worst SI';
+  const statLbl = document.getElementById('stat-score-label');
+  statLbl.textContent = currentMode === 'conventional' ? 'Conflicts' : 'Worst SI';
+}
+
+function renderLaserChips(lasers) {
+  const cont = document.getElementById('laser-chips');
+  cont.innerHTML = '';
+  (lasers || []).forEach(nm => {
+    const chip = document.createElement('span');
+    chip.className = 'laser-chip';
+    const color = (window.LASER_COLORS || {})[nm] || '#888';
+    chip.style.borderColor = color;
+    chip.style.color = color;
+    chip.textContent = nm + ' nm';
+    cont.appendChild(chip);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PANEL TABLE
+   ════════════════════════════════════════════════════════════════ */
+function addRow(marker='', density='medium', fluoro='') {
+  panelRows.push({ id: nextId++, marker, density, fluorochrome: fluoro });
+  renderPanelTable();
+  renderAll();
+}
+
+function deleteRow(id) {
+  panelRows = panelRows.filter(r => r.id !== id);
+  renderPanelTable();
+  renderAll();
+}
+
+function renderPanelTable() {
+  const tbody = document.getElementById('panel-tbody');
+  const inst = INSTRUMENTS[currentInstrumentId];
+  tbody.innerHTML = '';
+
+  if (!panelRows.length) {
+    tbody.innerHTML = `<tr><td colspan="7">
+      <div class="empty-state">
+        <div class="empty-icon">◎</div>
+        No markers yet.<br>Click <strong>+ Add marker</strong> to start, or <strong>✨ Auto-build</strong>.
+      </div>
+    </td></tr>`;
+    return;
+  }
+
+  // Get all pair scores for this panel in one pass
+  const result = window.scorePanel
+    ? window.scorePanel(panelRows, inst, currentMode)
+    : null;
+
+  panelRows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+
+    // Per-row worst conflict
+    let worstDisplay = '<span class="si-none">—</span>';
+    if (result && row.fluorochrome) {
+      if (currentMode !== 'conventional') {
+        // Worst SI for this row
+        const myPairs = result.pairScores.filter(p =>
+          (p.dyeA === row.fluorochrome || p.dyeB === row.fluorochrome) && p.bioClass === 'real'
+        );
+        if (myPairs.length) {
+          const worst = Math.max(...myPairs.map(p => p.si));
+          const cls = worst >= 0.9 ? 'si-bad' : worst >= 0.7 ? 'si-warn' : 'si-ok';
+          worstDisplay = `<span class="si-badge ${cls}">${worst.toFixed(2)}</span>`;
+        }
+      } else {
+        // Conventional: show worst conflict level
+        const myPairs = result.pairScores.filter(p =>
+          p.dyeA === row.fluorochrome || p.dyeB === row.fluorochrome
+        );
+        const levels = myPairs.map(p => p.convLevel);
+        if (levels.includes('detector') || levels.includes('spread_high')) {
+          worstDisplay = '<span class="si-badge si-bad">Conflict</span>';
+        } else if (levels.includes('spread_moderate')) {
+          worstDisplay = '<span class="si-badge si-warn">Warn</span>';
+        } else if (myPairs.length) {
+          worstDisplay = '<span class="si-badge si-ok">OK</span>';
+        }
+      }
+    }
+
+    // Laser for dye
+    let laserText = '—';
+    if (row.fluorochrome && inst) {
+      if (currentMode === 'conventional') {
+        const det = window.getDetectorForDye
+          ? window.getDetectorForDye(row.fluorochrome, inst)
+          : null;
+        laserText = det ? det.laser + ' nm' : '—';
+      } else {
+        // Rough laser assignment from DYE_EMISSION peak
+        const em = window.DYE_EMISSION && window.DYE_EMISSION[row.fluorochrome];
+        if (em) {
+          const lasers = inst.lasers || [];
+          // Pick closest laser that could excite (peak > laser+10)
+          const exc = lasers.filter(l => em.peak > l + 10);
+          laserText = exc.length ? exc[exc.length-1] + ' nm' : '—';
+        }
+      }
+    }
+
+    // Build dye options
+    const dyeOpts = buildDyeOptions(row.marker, row.density, inst);
+
+    tr.innerHTML = `
+      <td style="color:var(--muted);font-family:var(--font)">${i+1}</td>
+      <td><input type="text" value="${_esc(row.marker)}" placeholder="Marker"
+          oninput="updateRow(${row.id},'marker',this.value)"></td>
+      <td>
+        <select onchange="updateRow(${row.id},'density',this.value)">
+          ${DENSITIES.map(d=>`<option${d===row.density?' selected':''}>${d}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select onchange="updateRow(${row.id},'fluorochrome',this.value)">
+          <option value="">— pick dye —</option>
+          ${dyeOpts}
+        </select>
+      </td>
+      <td style="color:var(--muted);font-size:.72rem;font-family:var(--font)">${laserText}</td>
+      <td>${worstDisplay}</td>
+      <td><button class="del-btn" onclick="deleteRow(${row.id})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+
+    // Set select to current value
+    const sel = tr.querySelectorAll('select')[1];
+    if (sel && row.fluorochrome) sel.value = row.fluorochrome;
+  });
+}
+
+function buildDyeOptions(marker, density, inst) {
+  // Use DYE_CATALOG if available (from dyes.js)
+  const catalog = window.DYE_CATALOG || [];
+  const relevant = catalog.filter(d => {
+    // Filter to dyes that have an assigned detector on this instrument (conventional)
+    // or appear in DYE_EMISSION (spectral)
+    if (currentMode === 'conventional') {
+      return window.getDetectorForDye
+        ? window.getDetectorForDye(d.name, inst) !== null
+        : true;
+    }
+    return window.DYE_EMISSION ? (d.name in window.DYE_EMISSION) : true;
+  });
+
+  if (!relevant.length) {
+    // Fallback: keys from DYE_EMISSION
+    return Object.keys(window.DYE_EMISSION || {})
+      .map(n => `<option>${_esc(n)}</option>`).join('');
+  }
+
+  return relevant.map(d => `<option value="${_esc(d.name)}">${_esc(d.name)}</option>`).join('');
+}
+
+function updateRow(id, field, value) {
+  const row = panelRows.find(r => r.id === id);
+  if (row) {
+    row[field] = value;
+    // Re-render table for laser + score columns, but skip full DOM rebuild to avoid select flicker
+    renderScoreAndLaserCells();
+    renderAll();
+  }
+}
+
+function renderScoreAndLaserCells() {
+  // Light refresh: just re-render the table (full for now; optimize later if needed)
+  renderPanelTable();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER ALL (score views)
+   ════════════════════════════════════════════════════════════════ */
+function renderAll() {
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const isConv = currentMode === 'conventional';
+
+  // Show/hide views
+  document.getElementById('spectral-view').classList.toggle('visible', !isConv);
+  document.getElementById('conv-view').classList.toggle('visible', isConv);
+
+  // Score
+  const result = window.scorePanel
+    ? window.scorePanel(panelRows, inst, currentMode)
+    : null;
+
+  // Stats
+  const assigned = panelRows.filter(r => r.fluorochrome).length;
+  document.getElementById('stat-markers').textContent   = panelRows.length;
+  document.getElementById('stat-dyes').textContent      = assigned;
+
+  if (result) {
+    const s = result.summary;
+    if (!isConv) {
+      // Spectral
+      const threshold = parseFloat(document.getElementById('si-threshold').value);
+      const realConflicts = result.pairScores.filter(p =>
+        p.bioClass === 'real' && p.si >= threshold
+      ).length;
+      const worst = result.pairScores
+        .filter(p => p.bioClass === 'real')
+        .reduce((mx, p) => Math.max(mx, p.si), 0);
+      document.getElementById('stat-score').textContent    = worst > 0 ? worst.toFixed(2) : '—';
+      document.getElementById('stat-conflicts').textContent = realConflicts || '—';
+    } else {
+      // Conventional
+      const hardConflicts = result.detectorClashes.length + result.spreadConflicts.filter(c => c.severity === 'high').length;
+      const warnConflicts = result.spreadConflicts.filter(c => c.severity !== 'high').length;
+      document.getElementById('stat-score').textContent    = hardConflicts || (warnConflicts ? warnConflicts + ' warn' : '—');
+      document.getElementById('stat-conflicts').textContent = (hardConflicts + warnConflicts) || '—';
+    }
+  } else {
+    document.getElementById('stat-score').textContent    = '—';
+    document.getElementById('stat-conflicts').textContent = '—';
+  }
+
+  if (!isConv) {
+    renderSIMatrix(result);
+  } else {
+    renderDetectorGrid(result);
+    renderSpreadConflicts(result);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SPECTRAL: SI MATRIX
+   ════════════════════════════════════════════════════════════════ */
+function renderSIMatrix(result) {
+  const container = document.getElementById('matrix-container');
+  const threshold = parseFloat(document.getElementById('si-threshold').value);
+  const rows = panelRows.filter(r => r.fluorochrome);
+
+  if (!rows.length || !result) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:.78rem;padding:8px">Add markers and assign dyes to see the similarity matrix.</div>';
+    return;
+  }
+
+  const labels = rows.map(r => r.marker || r.fluorochrome);
+  let html = '<table class="matrix-table"><thead><tr><th></th>';
+  labels.forEach(l => { html += `<th title="${_esc(l)}">${_esc(l.length > 6 ? l.slice(0,5)+'…' : l)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  rows.forEach((rA, i) => {
+    html += `<tr><th>${_esc(labels[i].length>6?labels[i].slice(0,5)+'…':labels[i])}</th>`;
+    rows.forEach((rB, j) => {
+      if (i === j) { html += '<td class="mt-diag">·</td>'; return; }
+      if (i > j) {
+        // lower triangle mirrors upper
+        const pair = result.pairScores.find(p =>
+          (p.dyeA===rA.fluorochrome && p.dyeB===rB.fluorochrome) ||
+          (p.dyeA===rB.fluorochrome && p.dyeB===rA.fluorochrome)
+        );
+        if (!pair) { html += '<td class="mt-empty">—</td>'; return; }
+        const si = pair.si;
+        const bio = pair.bioClass !== 'real';
+        let cls = si >= threshold ? 'mt-bad' : si >= threshold - 0.15 ? 'mt-warn' : 'mt-ok';
+        if (bio) cls += ' mt-bio';
+        const onclick = `showOverlay('${_esc(rA.fluorochrome)}','${_esc(rB.fluorochrome)}','${_esc(rA.marker)}','${_esc(rB.marker)}')`;
+        html += `<td class="${cls}" title="${_esc(rA.marker)} vs ${_esc(rB.marker)}: SI=${si}" onclick="${onclick}">${si.toFixed(2)}</td>`;
+      } else {
+        html += '<td></td>';
+      }
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SPECTRAL OVERLAY
+   ════════════════════════════════════════════════════════════════ */
+function showOverlay(dyeA, dyeB, markerA, markerB) {
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const canvas = document.getElementById('overlay-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth; const H = canvas.offsetHeight;
+  canvas.width = W; canvas.height = H;
+
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface2') || '#1e2535';
+  ctx.fillRect(0,0,W,H);
+
+  const dets = inst.detectors || [];
+  if (!dets.length || !window.DYE_EMISSION) return;
+
+  function getVec(dye) {
+    const em = window.DYE_EMISSION[dye]; if (!em) return null;
+    return dets.map(d => {
+      const x = d.center; const mu = em.peak; const sig = em.sigma;
+      return Math.exp(-0.5*Math.pow((x-mu)/sig,2));
+    });
+  }
+
+  const vecA = getVec(dyeA);
+  const vecB = getVec(dyeB);
+  if (!vecA && !vecB) return;
+
+  function drawCurve(vec, color) {
+    if (!vec) return;
+    const max = Math.max(...vec, 0.001);
+    ctx.beginPath();
+    vec.forEach((v, i) => {
+      const x = (i / (vec.length-1)) * W;
+      const y = H - 10 - (v/max) * (H-20);
+      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.stroke();
+    // fill
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+    ctx.fillStyle = color.replace(')', ',0.1)').replace('rgb(','rgba(');
+    ctx.fill();
+  }
+
+  drawCurve(vecA, '#a78bfa');
+  drawCurve(vecB, '#38bdf8');
+
+  document.getElementById('overlay-title').textContent =
+    `Spectral overlay — ${markerA} (${dyeA}) vs ${markerB} (${dyeB})`;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CONVENTIONAL: DETECTOR OCCUPANCY GRID
+   ════════════════════════════════════════════════════════════════ */
+function renderDetectorGrid(result) {
+  const grid = document.getElementById('det-grid');
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const occupancy = window.getDetectorOccupancy
+    ? window.getDetectorOccupancy(panelRows, inst)
+    : [];
+
+  grid.innerHTML = '';
+
+  // Group by laser for display
+  const lasers = [...new Set(occupancy.map(o => o.detector.laser))];
+  lasers.forEach(laser => {
+    const slots = occupancy.filter(o => o.detector.laser === laser);
+    slots.forEach(o => {
+      const cell = document.createElement('div');
+      cell.className = `det-cell status-${o.status}`;
+
+      const laserColor = (window.LASER_COLORS || {})[laser] || '#888';
+      let dyeHtml = '';
+      if (o.assignedDyes.length === 0) {
+        dyeHtml = '<span class="det-empty-label">empty</span>';
+      } else {
+        dyeHtml = o.assignedDyes.map((a, idx) =>
+          `<div class="det-dye${o.status==='clash' && idx>0?' clash':''}">
+            <span>${_esc(a.dye)}</span>
+            <span class="det-marker">${_esc(a.marker)}</span>
+          </div>`
+        ).join('');
+      }
+
+      cell.innerHTML = `
+        <div class="det-laser" style="color:${laserColor}">${laser} nm</div>
+        <div class="det-name">${_esc(o.detector.name)}</div>
+        <div class="det-filter">${_esc(o.detector.filter)}</div>
+        ${dyeHtml}
+      `;
+      grid.appendChild(cell);
+    });
+  });
+
+  if (!occupancy.length) {
+    grid.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:.78rem">No detector configuration for this instrument in conventional mode.</div>';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CONVENTIONAL: SPREAD CONFLICTS
+   ════════════════════════════════════════════════════════════════ */
+function renderSpreadConflicts(result) {
+  const list = document.getElementById('spread-conflict-list');
+  const noMsg = document.getElementById('no-conflicts-msg');
+
+  if (!result) { noMsg.style.display = ''; return; }
+
+  // Combine detector clashes + spread conflicts
+  const items = [];
+
+  (result.detectorClashes || []).forEach(clash => {
+    items.push({
+      pair: clash.dyes.join(' + '),
+      level: 'detector',
+      type: 'detector_overlap',
+      note: `Both dyes map to the same detector slot (${_esc(clash.detector?.name)} · ${_esc(clash.detector?.filter)}). Only one can be used per panel.`
+    });
+  });
+
+  (result.spreadConflicts || []).forEach(c => {
+    items.push({
+      pair: c.dyeA + ' + ' + c.dyeB,
+      level: c.severity,
+      type: c.type,
+      note: c.note
+    });
+  });
+
+  if (!items.length) {
+    noMsg.style.display = '';
+    // Remove any old cards
+    list.querySelectorAll('.conflict-card').forEach(c => c.remove());
+    return;
+  }
+  noMsg.style.display = 'none';
+  list.querySelectorAll('.conflict-card').forEach(c => c.remove());
+
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = `conflict-card level-${item.level === 'high' ? 'high' : item.level}`;
+
+    const typeLabel = {
+      'detector_overlap': 'Same detector',
+      'tandem_degradation': 'Tandem degradation',
+      'compensation_burden': 'Compensation burden',
+    }[item.type] || item.type;
+
+    const typeClass = {
+      'detector_overlap': 'ct-detector',
+      'tandem_degradation': 'ct-tandem',
+      'compensation_burden': 'ct-spread',
+    }[item.type] || 'ct-spread';
+
+    card.innerHTML = `
+      <div class="conflict-pair">${_esc(item.pair)}</div>
+      <span class="conflict-type ${typeClass}">${_esc(typeLabel)}</span>
+      <span style="font-size:.6rem;color:${item.level==='detector'||item.level==='high'?'var(--danger)':'var(--warn)'}">
+        ${item.level === 'detector' || item.level === 'high' ? '● High' : '● Moderate'}
+      </span>
+      <div class="conflict-note">${_esc(item.note)}</div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ADD MARKER MODAL
+   ════════════════════════════════════════════════════════════════ */
+function openAddModal() {
+  document.getElementById('modal-marker').value = '';
+  document.getElementById('modal-fluoro').value = '';
+  document.getElementById('suggested-dyes-container').innerHTML = '';
+  openModal('add-modal');
+  setTimeout(() => document.getElementById('modal-marker').focus(), 50);
+}
+
+function updateSuggestedDyes(marker) {
+  const cont = document.getElementById('suggested-dyes-container');
+  const inst = INSTRUMENTS[currentInstrumentId];
+  cont.innerHTML = '';
+
+  // Pull from DYE_CATALOG suggestions if available
+  let dyes = Object.keys(window.DYE_EMISSION || {});
+
+  if (currentMode === 'conventional' && window.getDetectorForDye) {
+    dyes = dyes.filter(d => window.getDetectorForDye(d, inst) !== null);
+  }
+
+  // Show first 20
+  dyes.slice(0, 20).forEach(name => {
+    const chip = document.createElement('button');
+    chip.className = 'sug-chip';
+    chip.textContent = name;
+    chip.onclick = () => {
+      document.getElementById('modal-fluoro').value = name;
+      cont.querySelectorAll('.sug-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+    };
+    cont.appendChild(chip);
+  });
+}
+
+function confirmAddMarker() {
+  const marker = document.getElementById('modal-marker').value.trim();
+  const fluoro  = document.getElementById('modal-fluoro').value.trim();
+  if (!marker) { toast('Enter a marker name'); return; }
+  addRow(marker, 'medium', fluoro);
+  closeModal('add-modal');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   AUTO-BUILD MODAL
+   ════════════════════════════════════════════════════════════════ */
+function openAutoModal() {
+  openModal('auto-modal');
+  document.getElementById('auto-proposal').style.display = 'none';
+}
+
+function setAutoTab(tab) {
+  autoTabMode = tab;
+  ['scratch','fill','suggest'].forEach(t => {
+    document.getElementById('auto-tab-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+function runAutoBuild() {
+  const raw = document.getElementById('auto-markers').value;
+  const markerList = raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean)
+    .filter(m => m.toLowerCase() !== 'viability');
+  if (!markerList.length) { toast('Enter at least one marker'); return; }
+
+  const viabLocked = document.getElementById('auto-viab').value;
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const isConv = currentMode === 'conventional';
+  const laserOrder = inst.lasers || [];
+
+  // Use DYES catalog (dyes.js) — fall back to DYE_EMISSION keys if unavailable
+  const DYES = window.DYES || {};
+  // ── Co-expression helper ──────────────────────────────────
+  const RULES = window.COEXPRESSION_RULES || [];
+  function getRelation(mA, mB) {
+    const a = mA.toLowerCase(), b = mB.toLowerCase();
+    const rule = RULES.find(r =>
+      (r[0].toLowerCase() === a && r[1].toLowerCase() === b) ||
+      (r[0].toLowerCase() === b && r[1].toLowerCase() === a)
+    );
+    return rule ? rule[2] : 'independent';
+  }
+  function mustSeparate(mA, mB) {
+    const rel = getRelation(mA, mB);
+    return rel === 'co-expressed' || rel === 'subset';
+  }
+  function canShare(mA, mB) {
+    return getRelation(mA, mB) === 'exclusive';
+  }
+
+  // Laser abbreviation → nm map (matches dyes.js excite field)
+  const EXCITE_MAP = { UV:355, V:405, B:488, YG:561, R:638 };
+
+  function getDyeExciteNm(dyeName) {
+    const d = DYES[dyeName];
+    if (d && d.excite) return EXCITE_MAP[d.excite] || null;
+    // Fallback: derive from DYE_EMISSION peak
+    const em = window.DYE_EMISSION && window.DYE_EMISSION[dyeName];
+    if (!em) return null;
+    const exc = laserOrder.filter(l => em.peak > l + 10);
+    return exc.length ? exc[exc.length-1] : null;
+  }
+
+  function getBrightness(dyeName) {
+    const d = DYES[dyeName];
+    if (!d) return 2;
+    return { 'very-high':4, 'high':3, 'medium':2, 'low':1 }[d.brightness] || 2;
+  }
+
+  function getResolution(dyeName) {
+    const d = DYES[dyeName];
+    return d ? (d.resolution || 2) : 2;
+  }
+
+  function getSpillover(dyeName) {
+    const d = DYES[dyeName];
+    return d ? (d.spillover || 2) : 2;
+  }
+
+  function isViabilityDye(dyeName) {
+    const d = DYES[dyeName];
+    return d && d.category === 'Viability';
+  }
+
+  // Score how well a dye fits a marker density
+  // Higher = better fit
+  function densityFitScore(dyeName, density) {
+    const res = getResolution(dyeName);  // 1=dim, 4=bright
+    const sp  = getSpillover(dyeName);   // 1=clean, 4=high spillover
+    if (density === 'low' || density === 'very low') {
+      // Low density → need BRIGHT dye (high resolution rank), spillover secondary
+      return res * 3 - sp;
+    } else if (density === 'high') {
+      // High density → dim dye preferred, but spillover equally important
+      // Penalize high spillover heavily — PerCP/PerCP-Cy5.5 should not go on abundant antigens
+      if (sp >= 4) return -10; // hard penalty for very high spillover dyes
+      return (5 - res) + (5 - sp) * 2;
+    } else {
+      // Medium: balance
+      return res + (5 - sp);
+    }
+  }
+
+  // Build candidate pool — exclude viability dyes from general pool
+  const allDyes = Object.keys(DYES).filter(d => {
+    if (isViabilityDye(d)) return false;
+    if (isConv && window.getDetectorForDye) {
+      return window.getDetectorForDye(d, inst) !== null;
+    }
+    // Spectral: must be in DYE_EMISSION
+    return window.DYE_EMISSION && (d in window.DYE_EMISSION);
+  });
+
+  // Count how many markers per laser we can afford
+  const maxPerLaser = Math.max(2, Math.ceil(markerList.length / laserOrder.length));
+
+  const usedDyes = new Set();
+  const usedDetectors = new Set();
+  const laserCount = {};
+  laserOrder.forEach(l => { laserCount[String(l)] = 0; });
+
+  // Check if a dye can be assigned without conflict
+  function canAssign(dye, density, markerBeingAssigned) {
+    if (!dye || usedDyes.has(dye)) return false;
+    const laser = getDyeExciteNm(dye);
+    if (!laser) return false;
+
+    // Laser budget check
+    if ((laserCount[String(laser)] || 0) >= maxPerLaser) return false;
+
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      if (!det || usedDetectors.has(det.id)) return false;
+      if (window.getSpreadConflict) {
+        for (const used of usedDyes) {
+          const c = window.getSpreadConflict(dye, used);
+          if (c && c.severity === 'high') return false;
+        }
+      }
+    } else {
+      // Spectral: SI check — but skip if markers are biologically exclusive
+      if (window.getSpectralSI) {
+        for (const used of usedDyes) {
+          // Find which marker owns this used dye
+          const usedMarkerObj = assignments.find(a => a.fluorochrome === used);
+          const usedMarker = usedMarkerObj ? usedMarkerObj.marker : '';
+          // If exclusive, high SI is OK — skip conflict check
+          if (canShare(markerBeingAssigned, usedMarker)) continue;
+          if (window.getSpectralSI(dye, used, inst) > 0.7) return false;
+        }
+      }
+      // Co-expressed pairs must go on different lasers
+      const dyeLaser = getDyeExciteNm(dye);
+      for (const a of assignments) {
+        if (!a.fluorochrome) continue;
+        if (mustSeparate(markerBeingAssigned, a.marker)) {
+          const usedLaser = getDyeExciteNm(a.fluorochrome);
+          if (usedLaser && dyeLaser && usedLaser === dyeLaser) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function assign(dye) {
+    usedDyes.add(dye);
+    const laser = getDyeExciteNm(dye);
+    if (laser) laserCount[String(laser)] = (laserCount[String(laser)] || 0) + 1;
+    if (isConv && window.getDetectorForDye) {
+      const det = window.getDetectorForDye(dye, inst);
+      if (det) usedDetectors.add(det.id);
+    }
+  }
+
+  // Pick best dye for a given density from candidates
+  function pickBest(density, candidatePool, markerName) {
+    const valid = candidatePool.filter(d => canAssign(d, density, markerName));
+    if (!valid.length) return '';
+    // Sort by: laser balance first, then density fit, then low spillover
+    valid.sort((a, b) => {
+      const laserA = getDyeExciteNm(a) || 0;
+      const laserB = getDyeExciteNm(b) || 0;
+      const countA = laserCount[String(laserA)] || 0;
+      const countB = laserCount[String(laserB)] || 0;
+
+      let coexpPenaltyA = 0, coexpPenaltyB = 0;
+      for (const assigned of assignments) {
+        if (!assigned.fluorochrome) continue;
+        if (mustSeparate(markerName, assigned.marker)) {
+          const al = getDyeExciteNm(assigned.fluorochrome);
+          if (al === laserA) coexpPenaltyA += 3;
+          if (al === laserB) coexpPenaltyB += 3;
+        }
+      }
+
+      const scoreA = countA + coexpPenaltyA - densityFitScore(a, density);
+      const scoreB = countB + coexpPenaltyB - densityFitScore(b, density);
+      return scoreA - scoreB;
+    });
+    return valid[0];
+  }
+
+  const assignments = [];
+
+  // 1. Assign viability
+  let viabDye = viabLocked;
+  if (!viabDye) {
+    const viabPool = Object.keys(DYES).filter(d => {
+      if (!isViabilityDye(d)) return false;
+      if (isConv && window.getDetectorForDye) {
+        const det = window.getDetectorForDye(d, inst);
+        return det && !usedDetectors.has(det.id);
+      }
+      return window.DYE_EMISSION && (d in window.DYE_EMISSION);
+    });
+    // Prefer UV or Violet amine-reactive viability dyes
+    const preferred = viabPool.filter(d => {
+      const ex = getDyeExciteNm(d);
+      return ex === 355 || ex === 405;
+    });
+    viabDye = preferred[0] || viabPool[0] || '';
+  }
+  if (viabDye) {
+    assign(viabDye);
+    assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabDye });
+  }
+
+  // 2. Sort markers by density — assign dim antigens (low/very low) first
+  // because they need the brightest dyes; those are scarcer
+  const DENSITY_ORDER = ['very low', 'low', 'medium', 'high'];
+  const markerObjs = markerList.map((m, i) => {
+    // Try to look up density from markers.js if available
+    const known = window.MARKERS && window.MARKERS.find(mk => mk.name.toLowerCase() === m.toLowerCase());
+    const density = known ? known.density : (i < 3 ? 'high' : i < 6 ? 'medium' : 'low');
+    return { marker: m, density };
+  });
+  markerObjs.sort((a, b) =>
+    DENSITY_ORDER.indexOf(a.density) - DENSITY_ORDER.indexOf(b.density)
+  );
+
+  // 3. Assign each marker
+  markerObjs.forEach(({ marker, density }) => {
+    const dye = pickBest(density, allDyes, marker);
+    if (dye) assign(dye);
+    assignments.push({ marker, density, fluorochrome: dye || '' });
+  });
+
+  // Re-sort assignments back to original marker order for display
+  const origOrder = markerList.reduce((acc, m, i) => { acc[m] = i; return acc; }, {});
+  assignments.sort((a, b) => {
+    if (a.marker === 'Viability') return -1;
+    if (b.marker === 'Viability') return 1;
+    return (origOrder[a.marker] || 0) - (origOrder[b.marker] || 0);
+  });
+
+  pendingAutoBuild = assignments;
+
+  const propBody = document.getElementById('auto-proposal-body');
+  propBody.innerHTML = assignments.map(a => {
+    const d = DYES[a.fluorochrome];
+    const laser = a.fluorochrome ? getDyeExciteNm(a.fluorochrome) : null;
+    const laserLabel = laser ? laser + ' nm' : '';
+    return `<div style="font-size:.78rem;padding:5px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center">
+      <span style="color:var(--text)">${_esc(a.marker)} <span style="color:var(--muted);font-size:.65rem">(${a.density})</span></span>
+      <span style="color:var(--muted);font-size:.65rem;font-family:var(--font)">${laserLabel}</span>
+      <span style="font-family:var(--font);color:var(--accent2)">${_esc(a.fluorochrome||'—')}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('auto-proposal').style.display = '';
+}
+ window.applyAutoBuild = function() {
+  panelRows = pendingAutoBuild.map((a) => ({
+    id: nextId++,
+    marker: a.marker,
+    density: a.density,
+    fluorochrome: a.fluorochrome
+  }));
+  closeModal('auto-modal');
+  renderPanelTable();
+  renderAll();
+  toast('Panel applied ✓');
+}; 
+/* ════════════════════════════════════════════════════════════════
+   EXPORT
+   ════════════════════════════════════════════════════════════════ */
+function exportCSV() {
+  if (!panelRows.length) { toast('No markers to export'); return; }
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const result = window.scorePanel ? window.scorePanel(panelRows, inst, currentMode) : null;
+
+  const header = 'Marker,Density,Fluorochrome,Laser,Score,Mode,Instrument\n';
+  const lines = panelRows.map(r => {
+    let laser = '—';
+    if (r.fluorochrome) {
+      if (currentMode === 'conventional' && window.getDetectorForDye) {
+        const d = window.getDetectorForDye(r.fluorochrome, inst);
+        if (d) laser = d.laser + ' nm';
+      } else if (window.DYE_EMISSION) {
+        const em = window.DYE_EMISSION[r.fluorochrome];
+        if (em) {
+          const lasers = inst.lasers || [];
+          const exc = lasers.filter(l => em.peak > l + 10);
+          if (exc.length) laser = exc[exc.length-1] + ' nm';
+        }
+      }
+    }
+    // Worst score for this row
+    let score = '—';
+    if (result && r.fluorochrome) {
+      const myPairs = result.pairScores.filter(p =>
+        (p.dyeA===r.fluorochrome || p.dyeB===r.fluorochrome) && p.bioClass==='real'
+      );
+      if (currentMode !== 'conventional' && myPairs.length) {
+        score = Math.max(...myPairs.map(p=>p.si)).toFixed(2);
+      } else if (currentMode === 'conventional' && myPairs.length) {
+        const levels = myPairs.map(p=>p.convLevel);
+        score = levels.includes('detector') ? 'CONFLICT' :
+                levels.includes('spread_high') ? 'HIGH' :
+                levels.includes('spread_moderate') ? 'WARN' : 'OK';
+      }
+    }
+    return [r.marker, r.density, r.fluorochrome||'', laser, score, currentMode, inst.name]
+      .map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',');
+  });
+
+  const blob = new Blob([header + lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `panelcanvas_${inst.shortName}_${currentMode}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('CSV exported ✓');
+}
+
+function downloadSpectraTemplate() {
+  const inst = INSTRUMENTS[currentInstrumentId];
+  const dets = inst.detectors || [];
+  const header = 'Dye,' + dets.map(d => d.center+'nm').join(',') + '\n';
+  const example = 'BV421,' + dets.map(() => '0.00').join(',') + '\n';
+  const blob = new Blob([header + example], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `spectra_template_${inst.shortName}.csv`;
+  a.click();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MODAL HELPERS
+   ════════════════════════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', e => { if (e.target === b) b.classList.remove('open'); });
+});
+
+// Wire up "Add marker" button in table → modal
+window.addRow = function(m='', d='medium', f='') {
+  if (!m) { openAddModal(); return; }
+  panelRows.push({ id: nextId++, marker: m, density: d, fluorochrome: f });
+  renderPanelTable();
+  renderAll();
+};
+
+/* ════════════════════════════════════════════════════════════════
+   TOAST
+   ════════════════════════════════════════════════════════════════ */
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   UTILS
+   ════════════════════════════════════════════════════════════════ */
+function _esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  buildInstGrid();
+  selectInstrument('s6');
+
+  // Wire viab dropdown
+  const viabSel = document.getElementById('auto-viab');
+  const viabDyes = ['LIVE/DEAD Aqua','LIVE/DEAD Blue','LIVE/DEAD Near-IR',
+    'Ghost Violet 450','Ghost Violet 510','Ghost Red 780','Zombie Aqua',
+    'Zombie Yellow','Zombie Red','Zombie NIR','7-AAD','PI','TO-PRO-3',
+    'DAPI','Hoechst 33342','BUV395','BUV496'];
+  viabDyes.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d;
+    viabSel.appendChild(opt);
+  });
+
+  // Spectra upload (stub — plugs into existing v0.3 upload handler if present)
+  document.getElementById('spectra-upload').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    toast('Spectra uploaded: ' + file.name + ' (will apply on next score pass)');
+    // Full CSV parsing handled by existing uploadSpectra() if present
+    if (window.uploadSpectra) window.uploadSpectra(file);
+    e.target.value = '';
+  });
+});
+</script>
+</body>
+</html>
