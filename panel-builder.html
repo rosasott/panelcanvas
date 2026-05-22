@@ -1544,7 +1544,7 @@ function runAutoBuild() {
       return res * 3 - sp;
     } else if (density === 'high') {
       if (sp >= 4) return -10; // hard veto for very high spillover
-      if (res >= 3) return -5; // hard veto for bright dyes on high-density antigens
+      if (res === 4) return -5; // strong penalty for very-bright dyes only
       return (5 - res) * 3 + (5 - sp) * 2;
     } else {
       // Medium: balance
