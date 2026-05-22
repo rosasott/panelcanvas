@@ -1482,6 +1482,23 @@ function runAutoBuild() {
 
   // Use DYES catalog (dyes.js) — fall back to DYE_EMISSION keys if unavailable
   const DYES = window.DYES || {};
+  // ── Co-expression helper ──────────────────────────────────
+  const RULES = window.COEXPRESSION_RULES || [];
+  function getRelation(mA, mB) {
+    const a = mA.toLowerCase(), b = mB.toLowerCase();
+    const rule = RULES.find(r =>
+      (r[0].toLowerCase() === a && r[1].toLowerCase() === b) ||
+      (r[0].toLowerCase() === b && r[1].toLowerCase() === a)
+    );
+    return rule ? rule[2] : 'independent';
+  }
+  function mustSeparate(mA, mB) {
+    const rel = getRelation(mA, mB);
+    return rel === 'co-expressed' || rel === 'subset';
+  }
+  function canShare(mA, mB) {
+    return getRelation(mA, mB) === 'exclusive';
+  }
 
   // Laser abbreviation → nm map (matches dyes.js excite field)
   const EXCITE_MAP = { UV:355, V:405, B:488, YG:561, R:638 };
@@ -1555,7 +1572,7 @@ function runAutoBuild() {
   laserOrder.forEach(l => { laserCount[String(l)] = 0; });
 
   // Check if a dye can be assigned without conflict
-  function canAssign(dye, density) {
+  function canAssign(dye, density, markerBeingAssigned) {
     if (!dye || usedDyes.has(dye)) return false;
     const laser = getDyeExciteNm(dye);
     if (!laser) return false;
@@ -1573,10 +1590,24 @@ function runAutoBuild() {
         }
       }
     } else {
-      // Spectral: SI check
+      // Spectral: SI check — but skip if markers are biologically exclusive
       if (window.getSpectralSI) {
         for (const used of usedDyes) {
+          // Find which marker owns this used dye
+          const usedMarkerObj = assignments.find(a => a.fluorochrome === used);
+          const usedMarker = usedMarkerObj ? usedMarkerObj.marker : '';
+          // If exclusive, high SI is OK — skip conflict check
+          if (canShare(markerBeingAssigned, usedMarker)) continue;
           if (window.getSpectralSI(dye, used, inst) > 0.7) return false;
+        }
+      }
+      // Co-expressed pairs must go on different lasers
+      const dyeLaser = getDyeExciteNm(dye);
+      for (const a of assignments) {
+        if (!a.fluorochrome) continue;
+        if (mustSeparate(markerBeingAssigned, a.marker)) {
+          const usedLaser = getDyeExciteNm(a.fluorochrome);
+          if (usedLaser && dyeLaser && usedLaser === dyeLaser) return false;
         }
       }
     }
@@ -1594,11 +1625,32 @@ function runAutoBuild() {
   }
 
   // Pick best dye for a given density from candidates
-  function pickBest(density, candidatePool) {
-    const valid = candidatePool.filter(d => canAssign(d, density));
+  function pickBest(density, candidatePool, markerNAME) {
+    const valid = candidatePool.filter(d => canAssign(d, density, markerName));
     if (!valid.length) return '';
     // Sort by: laser balance first, then density fit, then low spillover
     valid.sort((a, b) => {
+      const laserA = getDyeExciteNm(a) || 0;
+      const laserB = getDyeExciteNm(b) || 0;
+      const countA = laserCount[String(laserA)] || 0;
+      const countB = laserCount[String(laserB)] || 0;
+
+      // Penalize lasers that already have co-expressed markers on them
+      let coexpPenaltyA = 0, coexpPenaltyB = 0;
+      for (const assigned of assignments) {
+        if (!assigned.fluorochrome) continue;
+        if (mustSeparate(markerName, assigned.marker)) {
+          const al = getDyeExciteNm(assigned.fluorochrome);
+          if (al === laserA) coexpPenaltyA += 3;
+          if (al === laserB) coexpPenaltyB += 3;
+        }
+      }
+
+      // Combined score: laser balance + co-expression penalty + density fit
+      const scoreA = countA + coexpPenaltyA - densityFitScore(a, density);
+      const scoreB = countB + coexpPenaltyB - densityFitScore(b, density);
+      return scoreA - scoreB;
+    });
       const laserA = getDyeExciteNm(a) || 0;
       const laserB = getDyeExciteNm(b) || 0;
       const countA = laserCount[laserA] || 0;
@@ -1652,7 +1704,7 @@ function runAutoBuild() {
 
   // 3. Assign each marker
   markerObjs.forEach(({ marker, density }) => {
-    const dye = pickBest(density, allDyes);
+    const dye = pickBest(density, allDyes, marker);
     if (dye) assign(dye);
     assignments.push({ marker, density, fluorochrome: dye || '' });
   });
