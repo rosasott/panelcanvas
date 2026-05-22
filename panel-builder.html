@@ -1544,7 +1544,7 @@ function runAutoBuild() {
       return res * 3 - sp;
     } else if (density === 'high') {
       if (sp >= 4) return -10; // hard veto for very high spillover
-      if (res === 4) return -5; // strong penalty for very-bright dyes only
+      if (res >= 3) return -5; // hard veto for bright dyes on high-density antigens
       return (5 - res) * 3 + (5 - sp) * 2;
     } else {
       // Medium: balance
@@ -1563,7 +1563,7 @@ function runAutoBuild() {
   });
 
   // Count how many markers per laser we can afford
-  const maxPerLaser = Math.max(2, Math.ceil(markerList.length / laserOrder.length));
+  const maxPerLaser = Math.max(3, Math.ceil(markerList.length / laserOrder.length) + 1);
 
   const usedDyes = new Set();
   const usedDetectors = new Set();
@@ -1673,6 +1673,28 @@ function runAutoBuild() {
   }
   if (viabDye) {
     assign(viabDye);
+    // Fallback: relax laser cap and try again
+    if (!assigned) {
+      for (const dye of allDyes) {
+        if (usedDyes.has(dye)) continue;
+        let blocked = false;
+        if (window.getSpectralSI) {
+          for (const used of usedDyes) {
+            const usedMarkerObj = assignments.find(a => a.fluorochrome === used);
+            const usedMarker = usedMarkerObj ? usedMarkerObj.marker : '';
+            if (canShare(marker, usedMarker)) continue;
+            if (window.getSpectralSI(dye, used, inst) > 0.85) { blocked = true; break; }
+          }
+        }
+        if (!blocked) {
+          assigned = dye;
+          usedDyes.add(dye);
+          const al = getDyeExciteNm(dye);
+          if (al) laserCount[String(al)] = (laserCount[String(al)] || 0) + 1;
+          break;
+        }
+      }
+    }
     assignments.push({ marker: 'Viability', density: 'high', fluorochrome: viabDye });
   }
 
