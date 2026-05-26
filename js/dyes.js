@@ -105,9 +105,9 @@ const DYES = {
   'VioBright 515':    { excite:'V', spillover:1, resolution:3, peak:515, sigma:40, brightness:'high',      category:'Vio', color:'#3080A8' },
   'VioBright B515':   { excite:'B', peak:515, sigma:40, brightness:'high',      category:'Vio', color:'#30A040' },
   'VioBright R720':   { excite:'R', spillover:1, resolution:3, peak:720, sigma:50, brightness:'high',      category:'Vio', color:'#A02038' },
-  'VioR667':          { excite:'V', spillover:1, resolution:3, peak:667, sigma:48, brightness:'medium',    category:'Vio', color:'#C04848',
+  'VioR667':          { excite:'R', spillover:1, resolution:3, peak:667, sigma:48, brightness:'medium',    category:'Vio', color:'#C04848',
                         bleed:{R:{peak:667,weight:0.20}} },
-  'VioR720':          { excite:'V', spillover:1, resolution:2, peak:720, sigma:50, brightness:'medium',    category:'Vio', color:'#A02860',
+  'VioR720':          { excite:'R', spillover:1, resolution:2, peak:720, sigma:50, brightness:'medium',    category:'Vio', color:'#A02860',
                         bleed:{R:{peak:720,weight:0.18}} },
 
   // Tonbo violetFluor
